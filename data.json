@@ -1,0 +1,312 @@
+[
+    {
+        "cmd": "adb devices",
+        "desc": "show connected devices",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb reboot recovery",
+        "desc": "Reboots into recovery mode.",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb install \u003capk\u003e",
+        "desc": "Installs APK to device.",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb install -r \u003capk\u003e",
+        "desc": "Reinstalls APK keeping data.",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb uninstall \u003cpackage\u003e",
+        "desc": "Uninstalls app from device.",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb shell pm list packages",
+        "desc": "Lists installed packages.",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb shell pm list packages -3",
+        "desc": "Lists installed apps by user (3rd part)",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb shell pm list packages -s",
+        "desc": "system packages",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb shell pm uninstall --user 0 \u003cpackage_name\u003e",
+        "desc": "Uninstall system apps",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb shell cmd package install-existing \u003cpackage_name\u003e",
+        "desc": "Reinstall system apps that was removed.",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb shell input text \"hello\"",
+        "desc": "Types text on device.",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb shell input keyevent \u003ckeycode\u003e",
+        "desc": "Sends key event (e.g. 26 for power).",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb shell input tap x y",
+        "desc": "Simulates screen tap.",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb shell input swipe x1 y1 x2 y2",
+        "desc": "Simulates swipe gesture.",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb tcpip 5555",
+        "desc": "Puts device in TCP/IP mode.",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb shell netstat",
+        "desc": "Shows network connections.",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb shell ip addr",
+        "desc": "Shows IP addresses.",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb shell screenrecord /sdcard/video.mp4",
+        "desc": "Records screen video.",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb shell run-as \u003capp-pkg\u003e ls cache",
+        "desc": "Show files of cache dir",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb reboot bootloader",
+        "desc": "Reboots into bootloader mode.",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb reboot",
+        "desc": "Reboot connected device",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb disconnect \u003cip\u003e:\u003cport\u003e",
+        "desc": "Disconnect ip port",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb connect \u003cip\u003e:\u003cport\u003e",
+        "desc": "Connect with specific ip and port",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb exec-out screencap -p \u003e screenshot.png",
+        "desc": "Take a screenshot from connected device",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb start-server",
+        "desc": "Start adb server",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb kill-server",
+        "desc": "Stop adb server",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb shell ls \u003cpath\u003e",
+        "desc": "Lists files at a path in device.",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb pull \u003cremote\u003e \u003clocal\u003e",
+        "desc": "Copies file/folder from device.",
+        "tag": "adb"
+    },
+    {
+        "cmd": "adb push \u003clocal\u003e \u003cremote\u003e",
+        "desc": "Copies file/folder to device.",
+        "tag": "adb"
+    },
+    {
+        "cmd": "python3 -m http.server",
+        "desc": "Run current dir as FTP server",
+        "tag": ""
+    },
+    {
+        "cmd": "cd ~",
+        "desc": "Go to home dir",
+        "tag": ""
+    },
+    {
+        "cmd": "cd --",
+        "desc": "Go back to previous dir",
+        "tag": ""
+    },
+    {
+        "cmd": "!!",
+        "desc": "Run previous command",
+        "tag": ""
+    },
+    {
+        "cmd": "kill -9 \u003cPID\u003e",
+        "desc": "Kill process with process id",
+        "tag": ""
+    },
+    {
+        "cmd": "chsh -s /bin/bash",
+        "desc": "Change default shell",
+        "tag": ""
+    },
+    {
+        "cmd": "echo $SHELL",
+        "desc": "Show current shell",
+        "tag": ""
+    },
+    {
+        "cmd": "echo 'testing data' \u003e test.txt",
+        "desc": "Create new file and add text",
+        "tag": ""
+    },
+    {
+        "cmd": "echo 'testing data' \u003e\u003e test.txt",
+        "desc": "Append new line at the end of file",
+        "tag": ""
+    },
+    {
+        "cmd": "whoami",
+        "desc": "Show user",
+        "tag": ""
+    },
+    {
+        "cmd": "passwd",
+        "desc": "Change password",
+        "tag": ""
+    },
+    {
+        "cmd": "rm -f *",
+        "desc": "Delete all files from current directory",
+        "tag": ""
+    },
+    {
+        "cmd": "rm -f *.txt",
+        "desc": "Delete all text files from current dir",
+        "tag": ""
+    },
+    {
+        "cmd": "rm -dr *",
+        "desc": "Delete all dir from current dir",
+        "tag": ""
+    },
+    {
+        "cmd": "rm path/to/file1 path/to/file2",
+        "desc": "Remove multiple files",
+        "tag": ""
+    },
+    {
+        "cmd": "pbcopy \u003c info.txt",
+        "desc": "Copy from file",
+        "tag": ""
+    },
+    {
+        "cmd": "pwd | pbcopy",
+        "desc": "Copy current dir",
+        "tag": ""
+    },
+    {
+        "cmd": "pbpaste",
+        "desc": "Paste from clipboard",
+        "tag": ""
+    },
+    {
+        "cmd": "pbpaste \u003e info.txt",
+        "desc": "Paste into file from clipboard",
+        "tag": ""
+    },
+    {
+        "cmd": "find / -type f -name '*.mp4'",
+        "desc": "Search for files in a directory hierarchy those are .mp4",
+        "tag": ""
+    },
+    {
+        "cmd": "find / -type f -name \"*.pdf\" 2\u003e/dev/null",
+        "desc": "Find pdf files, ignore system or not permitted dir",
+        "tag": ""
+    },
+    {
+        "cmd": "find ~/desktop -type d -empty -delete",
+        "desc": "Search all empty dir from desktop and delete them",
+        "tag": ""
+    },
+    {
+        "cmd": "curl cheat.sh/find",
+        "desc": "Fetch info regarding find from cheat.sh",
+        "tag": ""
+    },
+    {
+        "cmd": "curl -X POST -F \"file=@p.png\" http://192.168.0.191:8000/upload",
+        "desc": "Post file to specific ip",
+        "tag": ""
+    },
+    {
+        "cmd": "du -sh ~/Downloads",
+        "desc": "Disk usage of a specific dir",
+        "tag": ""
+    },
+    {
+        "cmd": "cd ..",
+        "desc": "Go to parent dir (one folder up)",
+        "tag": ""
+    },
+    {
+        "cmd": "git stash",
+        "desc": "Stash your changes",
+        "tag": ""
+    },
+    {
+        "cmd": "git stash list",
+        "desc": "Show all stashes",
+        "tag": ""
+    },
+    {
+        "cmd": "git stash apply",
+        "desc": "Apply last stash (keep it in stash list)",
+        "tag": "git"
+    },
+    {
+        "cmd": "git stash apply stash@{1}",
+        "desc": "Apply specific stash",
+        "tag": ""
+    },
+    {
+        "cmd": "git stash pop",
+        "desc": "Apply and remove from stash",
+        "tag": ""
+    },
+    {
+        "cmd": "git stash drop stash@{0}",
+        "desc": "Delete a stash",
+        "tag": ""
+    },
+    {
+        "cmd": "git stash clear",
+        "desc": "Delete all stash",
+        "tag": "git"
+    }
+]
