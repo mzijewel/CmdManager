@@ -64,6 +64,6 @@ Commands are stored in `cmd.json` in the application directory.
 ## Screenshots
 
 <div>
-  <img src="screenshots/1.png" height="300"/>
+  <img src="screenshots/1.png" height="600"/>
   <img src="screenshots/2.png" height="300"/>
 </div>

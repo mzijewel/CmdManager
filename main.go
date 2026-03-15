@@ -15,17 +15,16 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const jsonFilePath = "cmd.json"
-
+var jsonFilePath string
 var jsonFileFullPath string
 
 func init() {
-	absPath, err := filepath.Abs(jsonFilePath)
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		jsonFileFullPath = jsonFilePath
-	} else {
-		jsonFileFullPath = absPath
+		homeDir = "."
 	}
+	jsonFilePath = filepath.Join(homeDir, ".cmdviewer", "data.json")
+	jsonFileFullPath = jsonFilePath
 }
 
 type Item struct {
@@ -95,6 +94,10 @@ func loadItems() ([]Item, error) {
 }
 
 func saveItems(items []Item) error {
+	dir := filepath.Dir(jsonFilePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
 	data, err := json.MarshalIndent(items, "", "    ")
 	if err != nil {
 		return err
