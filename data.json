@@ -1,312 +1,546 @@
 [
     {
         "cmd": "adb devices",
-        "desc": "show connected devices",
-        "tag": "adb"
+        "desc": "show connected devices"
+    },
+    {
+        "cmd": "adb version",
+        "desc": "show adb version"
     },
     {
         "cmd": "adb reboot recovery",
-        "desc": "Reboots into recovery mode.",
-        "tag": "adb"
+        "desc": "Reboots into recovery mode."
     },
     {
-        "cmd": "adb install \u003capk\u003e",
-        "desc": "Installs APK to device.",
-        "tag": "adb"
+        "cmd": "adb install <apk>",
+        "desc": "Installs APK to device."
     },
     {
-        "cmd": "adb install -r \u003capk\u003e",
-        "desc": "Reinstalls APK keeping data.",
-        "tag": "adb"
+        "cmd": "adb install -r <apk>",
+        "desc": "Reinstalls APK keeping data."
     },
     {
-        "cmd": "adb uninstall \u003cpackage\u003e",
-        "desc": "Uninstalls app from device.",
-        "tag": "adb"
+        "cmd": "adb uninstall <package>",
+        "desc": "Uninstalls app from device."
     },
     {
         "cmd": "adb shell pm list packages",
-        "desc": "Lists installed packages.",
-        "tag": "adb"
+        "desc": "Lists installed packages."
     },
     {
         "cmd": "adb shell pm list packages -3",
-        "desc": "Lists installed apps by user (3rd part)",
-        "tag": "adb"
+        "desc": "Lists installed apps by user (3rd part)"
     },
     {
         "cmd": "adb shell pm list packages -s",
-        "desc": "system packages",
-        "tag": "adb"
+        "desc": "system packages"
     },
     {
-        "cmd": "adb shell pm uninstall --user 0 \u003cpackage_name\u003e",
-        "desc": "Uninstall system apps",
-        "tag": "adb"
+        "cmd": "adb shell pm uninstall --user 0 <package_name>",
+        "desc": "Uninstall system apps"
     },
     {
-        "cmd": "adb shell cmd package install-existing \u003cpackage_name\u003e",
-        "desc": "Reinstall system apps that was removed.",
-        "tag": "adb"
+        "cmd": "adb shell cmd package install-existing <package_name>",
+        "desc": "Reinstall system apps that was removed."
     },
     {
         "cmd": "adb shell input text \"hello\"",
-        "desc": "Types text on device.",
-        "tag": "adb"
+        "desc": "Types text on device."
     },
     {
-        "cmd": "adb shell input keyevent \u003ckeycode\u003e",
-        "desc": "Sends key event (e.g. 26 for power).",
-        "tag": "adb"
+        "cmd": "adb shell input keyevent <keycode>",
+        "desc": "Sends key event (e.g. 26 for power)."
     },
     {
         "cmd": "adb shell input tap x y",
-        "desc": "Simulates screen tap.",
-        "tag": "adb"
+        "desc": "Simulates screen tap."
     },
     {
         "cmd": "adb shell input swipe x1 y1 x2 y2",
-        "desc": "Simulates swipe gesture.",
-        "tag": "adb"
+        "desc": "Simulates swipe gesture."
     },
     {
         "cmd": "adb tcpip 5555",
-        "desc": "Puts device in TCP/IP mode.",
-        "tag": "adb"
+        "desc": "Puts device in TCP/IP mode."
     },
     {
         "cmd": "adb shell netstat",
-        "desc": "Shows network connections.",
-        "tag": "adb"
+        "desc": "Shows network connections."
     },
     {
         "cmd": "adb shell ip addr",
-        "desc": "Shows IP addresses.",
-        "tag": "adb"
+        "desc": "Shows IP addresses."
     },
     {
         "cmd": "adb shell screenrecord /sdcard/video.mp4",
-        "desc": "Records screen video.",
-        "tag": "adb"
+        "desc": "Records screen video."
     },
     {
-        "cmd": "adb shell run-as \u003capp-pkg\u003e ls cache",
-        "desc": "Show files of cache dir",
-        "tag": "adb"
+        "cmd": "adb shell run-as <app-pkg> ls cache",
+        "desc": "Show files of cache dir"
     },
     {
         "cmd": "adb reboot bootloader",
-        "desc": "Reboots into bootloader mode.",
-        "tag": "adb"
+        "desc": "Reboots into bootloader mode."
     },
     {
         "cmd": "adb reboot",
-        "desc": "Reboot connected device",
-        "tag": "adb"
+        "desc": "Reboot connected device"
     },
     {
-        "cmd": "adb disconnect \u003cip\u003e:\u003cport\u003e",
-        "desc": "Disconnect ip port",
-        "tag": "adb"
+        "cmd": "adb disconnect <ip>:<port>",
+        "desc": "Disconnect ip port"
     },
     {
-        "cmd": "adb connect \u003cip\u003e:\u003cport\u003e",
-        "desc": "Connect with specific ip and port",
-        "tag": "adb"
+        "cmd": "adb connect <ip>:<port>",
+        "desc": "Connect with specific ip and port"
     },
     {
-        "cmd": "adb exec-out screencap -p \u003e screenshot.png",
-        "desc": "Take a screenshot from connected device",
-        "tag": "adb"
+        "cmd": "adb exec-out screencap -p > screenshot.png",
+        "desc": "Take a screenshot from connected device"
     },
     {
         "cmd": "adb start-server",
-        "desc": "Start adb server",
-        "tag": "adb"
+        "desc": "Start adb server"
     },
     {
         "cmd": "adb kill-server",
-        "desc": "Stop adb server",
-        "tag": "adb"
+        "desc": "Stop adb server"
     },
     {
-        "cmd": "adb shell ls \u003cpath\u003e",
-        "desc": "Lists files at a path in device.",
-        "tag": "adb"
+        "cmd": "adb shell ls <path>",
+        "desc": "Lists files at a path in device."
     },
     {
-        "cmd": "adb pull \u003cremote\u003e \u003clocal\u003e",
-        "desc": "Copies file/folder from device.",
-        "tag": "adb"
+        "cmd": "adb pull <remote> <local>",
+        "desc": "Copies file/folder from device."
     },
     {
-        "cmd": "adb push \u003clocal\u003e \u003cremote\u003e",
-        "desc": "Copies file/folder to device.",
-        "tag": "adb"
+        "cmd": "adb push <local> <remote>",
+        "desc": "Copies file/folder to device."
     },
     {
         "cmd": "python3 -m http.server",
-        "desc": "Run current dir as FTP server",
-        "tag": ""
+        "desc": "Run current dir as FTP server"
     },
     {
         "cmd": "cd ~",
-        "desc": "Go to home dir",
-        "tag": ""
+        "desc": "Go to home dir"
     },
     {
         "cmd": "cd --",
-        "desc": "Go back to previous dir",
-        "tag": ""
+        "desc": "Go back to previous dir"
     },
     {
         "cmd": "!!",
-        "desc": "Run previous command",
-        "tag": ""
+        "desc": "Run previous command"
     },
     {
-        "cmd": "kill -9 \u003cPID\u003e",
-        "desc": "Kill process with process id",
-        "tag": ""
+        "cmd": "kill -9 <PID>",
+        "desc": "Kill process with process id"
     },
     {
         "cmd": "chsh -s /bin/bash",
-        "desc": "Change default shell",
-        "tag": ""
+        "desc": "Change default shell"
     },
     {
         "cmd": "echo $SHELL",
-        "desc": "Show current shell",
-        "tag": ""
+        "desc": "Show current shell"
     },
     {
-        "cmd": "echo 'testing data' \u003e test.txt",
-        "desc": "Create new file and add text",
-        "tag": ""
+        "cmd": "echo 'testing data' > test.txt",
+        "desc": "Create new file and add text"
     },
     {
-        "cmd": "echo 'testing data' \u003e\u003e test.txt",
-        "desc": "Append new line at the end of file",
-        "tag": ""
+        "cmd": "echo 'testing data' >> test.txt",
+        "desc": "Append new line at the end of file"
     },
     {
         "cmd": "whoami",
-        "desc": "Show user",
-        "tag": ""
+        "desc": "Show user"
     },
     {
         "cmd": "passwd",
-        "desc": "Change password",
-        "tag": ""
+        "desc": "Change password"
     },
     {
         "cmd": "rm -f *",
-        "desc": "Delete all files from current directory",
-        "tag": ""
+        "desc": "Delete all files from current directory"
     },
     {
         "cmd": "rm -f *.txt",
-        "desc": "Delete all text files from current dir",
-        "tag": ""
+        "desc": "Delete all text files from current dir"
     },
     {
         "cmd": "rm -dr *",
-        "desc": "Delete all dir from current dir",
-        "tag": ""
+        "desc": "Delete all dir from current dir"
     },
     {
         "cmd": "rm path/to/file1 path/to/file2",
-        "desc": "Remove multiple files",
-        "tag": ""
-    },
-    {
-        "cmd": "pbcopy \u003c info.txt",
-        "desc": "Copy from file",
-        "tag": ""
+        "desc": "Remove multiple files"
     },
     {
         "cmd": "pwd | pbcopy",
-        "desc": "Copy current dir",
-        "tag": ""
+        "desc": "Copy current dir"
     },
     {
         "cmd": "pbpaste",
-        "desc": "Paste from clipboard",
-        "tag": ""
+        "desc": "Paste from clipboard"
     },
     {
-        "cmd": "pbpaste \u003e info.txt",
-        "desc": "Paste into file from clipboard",
-        "tag": ""
+        "cmd": "pbpaste > info.txt",
+        "desc": "Paste into file from clipboard"
     },
     {
         "cmd": "find / -type f -name '*.mp4'",
-        "desc": "Search for files in a directory hierarchy those are .mp4",
-        "tag": ""
+        "desc": "Search for files in a directory hierarchy those are .mp4"
     },
     {
-        "cmd": "find / -type f -name \"*.pdf\" 2\u003e/dev/null",
-        "desc": "Find pdf files, ignore system or not permitted dir",
-        "tag": ""
+        "cmd": "find / -type f -name \"*.pdf\" 2>/dev/null",
+        "desc": "Find pdf files, ignore system or not permitted dir"
     },
     {
         "cmd": "find ~/desktop -type d -empty -delete",
-        "desc": "Search all empty dir from desktop and delete them",
-        "tag": ""
+        "desc": "Search all empty dir from desktop and delete them"
     },
     {
         "cmd": "curl cheat.sh/find",
-        "desc": "Fetch info regarding find from cheat.sh",
-        "tag": ""
+        "desc": "Fetch info regarding find from cheat.sh"
     },
     {
         "cmd": "curl -X POST -F \"file=@p.png\" http://192.168.0.191:8000/upload",
-        "desc": "Post file to specific ip",
-        "tag": ""
+        "desc": "Post file to specific ip"
     },
     {
         "cmd": "du -sh ~/Downloads",
-        "desc": "Disk usage of a specific dir",
-        "tag": ""
+        "desc": "Disk usage of a specific dir"
     },
     {
         "cmd": "cd ..",
-        "desc": "Go to parent dir (one folder up)",
-        "tag": ""
+        "desc": "Go to parent dir (one folder up)"
     },
     {
         "cmd": "git stash",
-        "desc": "Stash your changes",
-        "tag": ""
+        "desc": "Stash your changes"
     },
     {
         "cmd": "git stash list",
-        "desc": "Show all stashes",
-        "tag": ""
+        "desc": "Show all stashes"
     },
     {
         "cmd": "git stash apply",
-        "desc": "Apply last stash (keep it in stash list)",
-        "tag": "git"
+        "desc": "Apply last stash (keep it in stash list)"
     },
     {
         "cmd": "git stash apply stash@{1}",
-        "desc": "Apply specific stash",
-        "tag": ""
+        "desc": "Apply specific stash"
     },
     {
         "cmd": "git stash pop",
-        "desc": "Apply and remove from stash",
-        "tag": ""
+        "desc": "Apply and remove from stash"
     },
     {
         "cmd": "git stash drop stash@{0}",
-        "desc": "Delete a stash",
-        "tag": ""
+        "desc": "Delete a stash"
     },
     {
         "cmd": "git stash clear",
-        "desc": "Delete all stash",
-        "tag": "git"
+        "desc": "Delete all stash"
+    },
+    {
+        "cmd": "open .",
+        "desc": "Open folder of current directory"
+    },
+    {
+        "cmd": "open -a Warp .",
+        "desc": "Open warp terminal with current directory"
+    },
+    {
+        "cmd": "tar -cvf archive.tar file1 file2 folder/",
+        "desc": "Create a .tar Archive (Without Compression)"
+    },
+    {
+        "cmd": "tar -xvf archive.tar",
+        "desc": "Extract a .tar Archive"
+    },
+    {
+        "cmd": "tar -czvf archive.tar.gz file1 file2 folder/",
+        "desc": "Create a Compressed .tar.gz Archive"
+    },
+    {
+        "cmd": "tar -xzvf archive.tar.gz",
+        "desc": "Extract a .tar.gz Archive"
+    },
+    {
+        "cmd": "tar -tf archive.tar",
+        "desc": "List Contents of a .tar File Without Extracting"
+    },
+    {
+        "cmd": "tar -rvf archive.tar newfile.txt",
+        "desc": "Add a File to an Existing .tar Archive"
+    },
+    {
+        "cmd": "brew install <pkg>",
+        "desc": "Install app using brew"
+    },
+    {
+        "cmd": "brew update",
+        "desc": "updates Homebrew itself"
+    },
+    {
+        "cmd": "brew upgrade",
+        "desc": "updates installed packages"
+    },
+    {
+        "cmd": "brew search <keyword>",
+        "desc": "Search app in brew server"
+    },
+    {
+        "cmd": "brew list",
+        "desc": "Show installed apps"
+    },
+    {
+        "cmd": "brew uninstall <pkg>",
+        "desc": "Uninstall app from brew"
+    },
+    {
+        "cmd": "brew doctor",
+        "desc": "Check issues"
+    },
+    {
+        "cmd": "brew cleanup",
+        "desc": "Cleanup old version"
+    },
+    {
+        "cmd": "pbcopy < data.json",
+        "desc": "Copy to clipboard all data from data.json in mac"
+    },
+    {
+        "cmd": "git init",
+        "desc": "Git initalize"
+    },
+    {
+        "cmd": "git config user.email \"your@email.com\"",
+        "desc": "Set user email"
+    },
+    {
+        "cmd": "git config user.name \"yourName\"",
+        "desc": "Set username"
+    },
+    {
+        "cmd": "git status",
+        "desc": "Show status"
+    },
+    {
+        "cmd": "git status -s",
+        "desc": "Show status in short"
+    },
+    {
+        "cmd": "git log",
+        "desc": "Show log"
+    },
+    {
+        "cmd": "git log --oneline",
+        "desc": "Show log in one line"
+    },
+    {
+        "cmd": "git reflog",
+        "desc": "Show log with reference"
+    },
+    {
+        "cmd": "git log branch1 --not branch2",
+        "desc": "Show those commits only those are not in branch2"
+    },
+    {
+        "cmd": "git add .",
+        "desc": "Add in staging mode"
+    },
+    {
+        "cmd": "git commit -a -m \"message\"",
+        "desc": "Direct update through one line"
+    },
+    {
+        "cmd": "git commit --amend -m \"Updated commit message”",
+        "desc": "update last commit"
+    },
+    {
+        "cmd": "git remote add origin [ssh link here]",
+        "desc": "For remote linking with github project online"
+    },
+    {
+        "cmd": "git remote -v",
+        "desc": "Show added remote url"
+    },
+    {
+        "cmd": "git push origin --all",
+        "desc": "Push all branches & tags"
+    },
+    {
+        "cmd": "git push origin main",
+        "desc": "Push only main branch"
+    },
+    {
+        "cmd": "git push --tags",
+        "desc": "Push tags to remote"
+    },
+    {
+        "cmd": "git push -f",
+        "desc": "Push to working branch by force"
+    },
+    {
+        "cmd": "git pull origin main",
+        "desc": "Pull changes from main branch"
+    },
+    {
+        "cmd": "git pull origin main --allow-unrelated-histories",
+        "desc": "Pull allow unrelated histories"
+    },
+    {
+        "cmd": "git checkout [branch name]",
+        "desc": "Set active working branch"
+    },
+    {
+        "cmd": "git checkout -- <file>",
+        "desc": "Reset specific file to head (git checkout -- a.txt"
+    },
+    {
+        "cmd": "git switch -c newBranchName",
+        "desc": "Checkout after going to the previous comment."
+    },
+    {
+        "cmd": "git merge [branch name]",
+        "desc": "Merge with the branch name"
+    },
+    {
+        "cmd": "git merge --abort",
+        "desc": "Abort git merge & back to previous stage"
+    },
+    {
+        "cmd": "git config --list",
+        "desc": "Show configure list"
+    },
+    {
+        "cmd": "git remote rm origin",
+        "desc": "remove the remote"
+    },
+    {
+        "cmd": "git remote -v",
+        "desc": "Show remote url"
+    },
+    {
+        "cmd": "git rm -r --cached app/build/",
+        "desc": "Git Cache remove"
+    },
+    {
+        "cmd": "git rm -f <file>",
+        "desc": "Git remove from folder by force"
+    },
+    {
+        "cmd": "git reset",
+        "desc": "All stages changes to unstaged"
+    },
+    {
+        "cmd": "git reset --hard",
+        "desc": "To remove permanently from stages/unstaged"
+    },
+    {
+        "cmd": "Git reset  --hard HEAD^",
+        "desc": "Git remove last commit and back to prev one"
+    },
+    {
+        "cmd": "git reset --hard <remoteBranch>",
+        "desc": "Make same as it is branchName"
+    },
+    {
+        "cmd": "git reset --soft HEAD~2",
+        "desc": "Last two commits changes to unstage"
+    },
+    {
+        "cmd": "git tag -a v1 -m “version 1”",
+        "desc": "Create tag"
+    },
+    {
+        "cmd": "git tag -n",
+        "desc": "Show git tags"
+    },
+    {
+        "cmd": "git checkout -b newBranch tagName",
+        "desc": "Checkout from tag as new branch"
+    },
+    {
+        "cmd": "git cherry-pick <commit_id1> <commit_id>",
+        "desc": "Merge only specific commits in current branch"
+    },
+    {
+        "cmd": "git switch “existing_branch”",
+        "desc": "Switch with running code with existing branch"
+    },
+    {
+        "cmd": "git branch -- merged",
+        "desc": "Show list of branches those are merged "
+    },
+    {
+        "cmd": "git branch -- no-merged",
+        "desc": "Show list of branches those are not merged yet"
+    },
+    {
+        "cmd": "cp file.txt newFile.txt",
+        "desc": "Rename or copy file. cp file.text path/file.txt"
+    },
+    {
+        "cmd": "cp -r dirName newDirName",
+        "desc": "Copy folder to another path"
+    },
+    {
+        "cmd": "ffmpeg -i input.mp4 -vcodec libx265 output.mp4",
+        "desc": "Reduce the video size"
+    },
+    {
+        "cmd": "ffmpeg -i input.mp4 output.avi",
+        "desc": "Convert a video file to another format"
+    },
+    {
+        "cmd": "ffmpeg -i a.mp4 a.mp3",
+        "desc": "Mp4 to mp3"
+    },
+    {
+        "cmd": "ffmpeg -i a.mp4 -map 0:a:0 a.mp3",
+        "desc": "If there is multiple audio source. Suppose we will take first one"
+    },
+    {
+        "cmd": "ffmpeg -i input.mp4 -ss 00:00:05 -to 00:02:00 output.mp4",
+        "desc": "Split Video/Audio"
+    },
+    {
+        "cmd": "ffmpeg -i input.mp4 -vf scale=640:360 output.mp4",
+        "desc": "Resize video"
+    },
+    {
+        "cmd": "ffmpeg -i input.mp3 -b:a 128k output.mp3",
+        "desc": "Change audio Bitrate"
+    },
+    {
+        "cmd": "ffmpeg -i video.mp4 -i audio.mp3 -c:v copy -c:a aac output.mp4",
+        "desc": "Merge video and audio"
+    },
+    {
+        "cmd": "ffmpeg -i input.mp4 -vf subtitles=subtitle.srt output.mp4 ",
+        "desc": "Add subtitle to video"
+    },
+    {
+        "cmd": "ffmpeg -framerate 1 -i image%d.jpg -c:v libx264 -r 30 -pix_fmt yuv420p output.mp4 ",
+        "desc": "Convert image to video"
+    },
+    {
+        "cmd": "ffmpeg -i input.mp4 -vf fps=1 output%d.png",
+        "desc": "Extract frame from video"
+    },
+    {
+        "cmd": "ffmpeg -i input.mp4 -i logo.png -filter_complex \"overlay=10:10\" output.mp4",
+        "desc": "Overlay a logo on video"
+    },
+    {
+        "cmd": "ffmpeg -i input.mp4 -vf \"fps=10,scale=320:-2:flags=lanczos\" output.gif",
+        "desc": "Create GIF from video"
     }
 ]

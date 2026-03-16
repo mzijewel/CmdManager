@@ -50,7 +50,6 @@ const (
 const (
 	fieldCmd  = 0
 	fieldDesc = 1
-	fieldTag  = 2
 )
 
 var jsonFilePath string
@@ -68,7 +67,6 @@ func init() {
 type Item struct {
 	Cmd  string `json:"cmd"`
 	Desc string `json:"desc"`
-	Tag  string `json:"tag"`
 }
 
 func (i Item) Title() string       { return i.Cmd }
@@ -143,21 +141,24 @@ func saveItems(items []Item) error {
 		return err
 	}
 
-	data, err := json.MarshalIndent(items, "", "    ")
-	if err != nil {
+	var buf strings.Builder
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "    ")
+	if err := encoder.Encode(items); err != nil {
 		return err
 	}
 
-	return os.WriteFile(jsonFilePath, data, 0o644)
+	return os.WriteFile(jsonFilePath, []byte(buf.String()), 0o644)
 }
 
 // updateListItems updates the list model with current items
 func (m *model) updateListItems() {
 	if m.customFilterEnabled && m.filterText != "" {
-		// Apply exact contains filtering on cmd, desc, and tag
+		// Apply exact contains filtering on cmd and desc
 		var filtered []list.Item
 		for _, item := range m.items {
-			if strings.Contains(item.Cmd, m.filterText) || strings.Contains(item.Desc, m.filterText) || strings.Contains(item.Tag, m.filterText) {
+			if strings.Contains(item.Cmd, m.filterText) || strings.Contains(item.Desc, m.filterText) {
 				filtered = append(filtered, item)
 			}
 		}
@@ -184,7 +185,7 @@ func setupTextInput() textinput.Model {
 	ti.Placeholder = "Type to search..."
 	ti.CharLimit = maxTextInputLen
 	ti.Width = textInputWidth
-	ti.Prompt = ""
+
 	return ti
 }
 
@@ -240,10 +241,6 @@ func (m *model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.textInput.Focused() {
-		return m.handleSearchInput(msg)
-	}
-
 	switch m.mode {
 	case modeAdd:
 		return m.handleAddInput(msg)
@@ -253,6 +250,10 @@ func (m *model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleEditFieldInput(msg)
 	case modeConfirmDelete:
 		return m.handleDeleteConfirm(msg)
+	}
+
+	if m.textInput.Focused() {
+		return m.handleSearchInput(msg)
 	}
 
 	return m.handleListKeys(msg)
@@ -266,10 +267,13 @@ func (m *model) handleSearchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filterText = ""
 		m.customFilterEnabled = false
 		m.updateListItems()
+		m.list.Title = "Command Viewer - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
 	case tea.KeyEnter:
 		m.textInput.Blur()
+		m.list.Title = "Command Viewer - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
 	case tea.KeyDown, tea.KeyUp:
 		m.textInput.Blur()
+		m.list.Title = "Command Viewer - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
 		m.list, _ = m.list.Update(msg)
 		return m, nil
 	default:
@@ -278,6 +282,7 @@ func (m *model) handleSearchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filterText = m.textInput.Value()
 		m.customFilterEnabled = true
 		m.updateListItems()
+		m.list.Title = "Search: " + m.textInput.View()
 		return m, cmd
 	}
 	return m, nil
@@ -287,7 +292,7 @@ func (m *model) handleAddInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC, tea.KeyEsc:
 		m.mode = modeList
-		m.textInput.SetValue("")
+		m.textInput.Blur()
 		return m, nil
 	case tea.KeyEnter:
 		m.newItem.Cmd = m.textInput.Value()
@@ -308,7 +313,7 @@ func (m *model) handleAddFieldInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC, tea.KeyEsc:
 		m.mode = modeList
-		m.textInput.SetValue("")
+		m.textInput.Blur()
 		return m, nil
 	case tea.KeyEnter:
 		return m.completeAddField()
@@ -323,13 +328,6 @@ func (m *model) completeAddField() (tea.Model, tea.Cmd) {
 	switch m.editField {
 	case fieldDesc:
 		m.newItem.Desc = m.textInput.Value()
-		m.editField = fieldTag
-		m.textInput.Placeholder = "Enter tag..."
-		m.textInput.SetValue("")
-		m.textInput.Focus()
-		return m, textinput.Blink
-	case fieldTag:
-		m.newItem.Tag = m.textInput.Value()
 		m.items = append(m.items, m.newItem)
 
 		if err := saveItems(m.items); err != nil {
@@ -337,6 +335,7 @@ func (m *model) completeAddField() (tea.Model, tea.Cmd) {
 		}
 		m.updateListItems()
 		m.mode = modeList
+		m.textInput.Blur()
 		m.textInput.SetValue("")
 		m.showMessage("Command added!")
 		return m, nil
@@ -348,7 +347,7 @@ func (m *model) handleEditFieldInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC, tea.KeyEsc:
 		m.mode = modeList
-		m.textInput.SetValue("")
+		m.textInput.Blur()
 		return m, nil
 	case tea.KeyEnter:
 		return m.completeEditField()
@@ -364,27 +363,22 @@ func (m *model) completeEditField() (tea.Model, tea.Cmd) {
 	case fieldCmd:
 		m.items[m.editingIndex].Cmd = m.textInput.Value()
 		m.editField = fieldDesc
+		m.textInput = textinput.New()
 		m.textInput.Placeholder = "Edit description..."
+		m.textInput.CharLimit = maxTextInputLen
+		m.textInput.Width = textInputWidth
 		m.textInput.SetValue(m.items[m.editingIndex].Desc)
-		m.textInput.CursorEnd()
 		m.textInput.Focus()
 		return m, textinput.Blink
 	case fieldDesc:
 		m.items[m.editingIndex].Desc = m.textInput.Value()
-		m.editField = fieldTag
-		m.textInput.Placeholder = "Edit tag..."
-		m.textInput.SetValue(m.items[m.editingIndex].Tag)
-		m.textInput.CursorEnd()
-		m.textInput.Focus()
-		return m, textinput.Blink
-	case fieldTag:
-		m.items[m.editingIndex].Tag = m.textInput.Value()
 
 		if err := saveItems(m.items); err != nil {
 			m.showMessage("Error saving: " + err.Error())
 		}
 		m.updateListItems()
 		m.mode = modeList
+		m.textInput.Blur()
 		m.textInput.SetValue("")
 		m.showMessage("Item updated!")
 		return m, nil
@@ -463,6 +457,7 @@ func (m *model) handleListRunes(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filterText = ""
 		m.customFilterEnabled = false
 		m.updateListItems()
+		m.list.Title = "Search: " + m.textInput.View()
 		return m, textinput.Blink
 	case "a", "A":
 		return m.startAdd()
@@ -496,7 +491,6 @@ func (m *model) startAdd() (tea.Model, tea.Cmd) {
 	m.mode = modeAdd
 	m.newItem = Item{
 		Desc: "New command",
-		Tag:  "general",
 	}
 	m.textInput.Placeholder = "Enter command..."
 	m.textInput.SetValue("")
@@ -513,9 +507,11 @@ func (m *model) startEdit() (tea.Model, tea.Cmd) {
 	m.mode = modeEditField
 	m.editingIndex = m.findItemIndex(selectedItem)
 	m.editField = fieldCmd
+	m.textInput = textinput.New()
 	m.textInput.Placeholder = "Edit command..."
+	m.textInput.CharLimit = maxTextInputLen
+	m.textInput.Width = textInputWidth
 	m.textInput.SetValue(m.items[m.editingIndex].Cmd)
-	m.textInput.CursorEnd()
 	m.textInput.Focus()
 	return m, textinput.Blink
 }
@@ -576,15 +572,10 @@ func (m *model) viewAdd() string {
 }
 
 func (m *model) viewAddField() string {
-	fieldName := map[int]string{
-		fieldDesc: "Description",
-		fieldTag:  "Tag",
-	}[m.editField]
-
-	s := fmt.Sprintf("\n  Add New Command - Step %d\n\n", m.editField)
+	s := "\n  Add New Command\n\n"
 	s += "  Command: " + m.newItem.Cmd + "\n"
-	s += "  " + fieldName + ": " + m.textInput.View() + "\n\n"
-	s += "  (Enter to continue, Ctrl+C/Esc to cancel)"
+	s += "  Description: " + m.textInput.View() + "\n\n"
+	s += "  (Enter to save, Ctrl+C/Esc to cancel)"
 	return s
 }
 
@@ -592,11 +583,9 @@ func (m *model) viewEditField() string {
 	fieldName := map[int]string{
 		fieldCmd:  "Command",
 		fieldDesc: "Description",
-		fieldTag:  "Tag",
 	}[m.editField]
 
 	s := fmt.Sprintf("\n  Edit Item - Step %d\n\n", m.editField+1)
-	s += "  Command: " + m.items[m.editingIndex].Cmd + "\n"
 	s += "  " + fieldName + ": " + m.textInput.View() + "\n\n"
 	s += "  (Enter to continue, Ctrl+C/Esc to cancel)"
 	return s
@@ -625,13 +614,6 @@ func (m *model) viewHelp() string {
 }
 
 func (m *model) viewList() string {
-	// Update list title based on search state
-	if m.textInput.Focused() {
-		m.list.Title = "Search: " + m.textInput.View()
-	} else {
-		m.list.Title = "Command Viewer - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
-	}
-
 	var s string
 	s += m.list.View()
 	s += m.renderStatusBar()
@@ -668,18 +650,16 @@ func (m *model) renderItemDetails() string {
 	}
 
 	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colorWhite))
-	tagStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colorYellow))
 	messageStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen))
 
 	desc := descStyle.Render(selectedItem.Desc)
-	tag := tagStyle.Render(selectedItem.Tag)
 
 	if m.hasActiveMessage() {
 		msg := messageStyle.Render(m.message)
-		return "\n  " + desc + "  │  " + msg + "\n  " + tag + "\n  "
+		return "\n  " + desc + "  │  " + msg + "\n  "
 	}
 
-	return "\n  " + desc + "\n  " + tag + "\n  "
+	return "\n  " + desc + "\n  "
 }
 
 func (m *model) renderEmptyOrMessage() string {

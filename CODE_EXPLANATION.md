@@ -27,14 +27,12 @@ cmd/
 type Item struct {
     Cmd  string `json:"cmd"`   // The command itself
     Desc string `json:"desc"`  // Command description
-    Tag  string `json:"tag"`   // Category/tag for organization
 }
 ```
 
-Each command item has three fields:
+Each command item has two fields:
 - **Cmd**: The actual shell command
 - **Desc**: Human-readable description
-- **Tag**: Category label for filtering
 
 ---
 
@@ -81,12 +79,11 @@ type model struct {
 ```go
 func (m *model) updateListItems() {
     if m.customFilterEnabled && m.filterText != "" {
-        // Filter commands by cmd, desc, and tag
+        // Filter commands by cmd and desc
         var filtered []list.Item
         for _, item := range m.items {
-            if strings.Contains(item.Cmd, m.filterText) || 
-               strings.Contains(item.Desc, m.filterText) || 
-               strings.Contains(item.Tag, m.filterText) {
+            if strings.Contains(item.Cmd, m.filterText) ||
+               strings.Contains(item.Desc, m.filterText) {
                 filtered = append(filtered, item)
             }
         }
@@ -116,7 +113,7 @@ func (m *model) updateListItems() {
 ### Key Features
 
 1. **Substring Matching**: Uses `strings.Contains()` for exact substring matching (not fuzzy)
-2. **Multi-Field Search**: Searches in command, description, and tag
+2. **Multi-Field Search**: Searches in command and description
 3. **Dynamic Width**: Input box expands to fit terminal width
 4. **No Character Limit**: Can type long search queries
 
@@ -183,19 +180,19 @@ func saveItems(items []Item) error {
 ### Adding a Command
 
 ```
-modeList → modeAdd → modeAddField (desc) → modeAddField (tag) → modeList
-     ↓         ↓            ↓                    ↓
-   press     press       press                press
-    'a'     Enter       Enter                Enter
+modeList → modeAdd → modeAddField (desc) → modeList
+     ↓         ↓            ↓
+   press     press       press
+    'a'     Enter       Enter
 ```
 
 ### Editing a Command
 
 ```
-modeList → modeEditField (cmd) → modeEditField (desc) → modeEditField (tag) → modeList
-     ↓            ↓                    ↓                     ↓
-   press        press                press                 press
-    'e'        Enter                Enter                 Enter
+modeList → modeEditField (cmd) → modeEditField (desc) → modeList
+     ↓            ↓                    ↓
+   press        press                press
+    'e'        Enter                Enter
 ```
 
 ### Deleting a Command
@@ -269,7 +266,6 @@ func (m *model) viewList() string {
 │  Total: 3 items                                         │  ← Status bar
 ├─────────────────────────────────────────────────────────┤
 │  Shows current branch status                            │  ← Description
-│  Tag: git                                               │  ← Tag
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -284,7 +280,6 @@ func (m *model) viewList() string {
 │  Showing: 2 of 3 items                                  │  ← Status bar shows filtered count
 ├─────────────────────────────────────────────────────────┤
 │  Shows current branch status                            │  ← Description
-│  Tag: git                                               │  ← Tag
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -292,6 +287,7 @@ func (m *model) viewList() string {
 - Search input appears **in the title area** when `/` is pressed (no extra height)
 - Title dynamically switches between keybindings and search input
 - No vertical space consumed when search is inactive
+- Description displayed at bottom for selected command
 
 ---
 
@@ -392,18 +388,15 @@ go build -o cmdviewer
 [
     {
         "cmd": "git status",
-        "desc": "Show current branch and changes",
-        "tag": "git"
+        "desc": "Show current branch and changes"
     },
     {
         "cmd": "docker ps",
-        "desc": "List running containers",
-        "tag": "docker"
+        "desc": "List running containers"
     },
     {
         "cmd": "kubectl get pods",
-        "desc": "List Kubernetes pods",
-        "tag": "kubernetes"
+        "desc": "List Kubernetes pods"
     }
 ]
 ```
