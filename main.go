@@ -21,7 +21,7 @@ const (
 	messageTimeout  = 3 * time.Second
 	maxTextInputLen = 0
 	textInputWidth  = 80
-	paddingHeight   = 7
+	paddingHeight   = 8
 )
 
 // Colors
@@ -104,19 +104,18 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 
 // model holds the application state
 type model struct {
-	list              list.Model
-	items             []Item
-	textInput         textinput.Model
-	showInput         bool
-	mode              string
-	editingIndex      int
-	editField         int
-	newItem           Item
-	message           string
-	messageTime       time.Time
-	filterText        string
+	list                list.Model
+	items               []Item
+	textInput           textinput.Model
+	mode                string
+	editingIndex        int
+	editField           int
+	newItem             Item
+	message             string
+	messageTime         time.Time
+	filterText          string
 	customFilterEnabled bool
-	windowWidth       int
+	windowWidth         int
 }
 
 // loadItems loads items from the JSON file
@@ -241,7 +240,7 @@ func (m *model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.showInput {
+	if m.textInput.Focused() {
 		return m.handleSearchInput(msg)
 	}
 
@@ -262,22 +261,15 @@ func (m *model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *model) handleSearchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.showInput = false
+		m.textInput.Blur()
 		m.textInput.SetValue("")
-		m.list.ResetFilter()
 		m.filterText = ""
 		m.customFilterEnabled = false
 		m.updateListItems()
 	case tea.KeyEnter:
-		m.showInput = false
-		m.filterText = m.textInput.Value()
-		m.customFilterEnabled = true
-		m.updateListItems()
+		m.textInput.Blur()
 	case tea.KeyDown, tea.KeyUp:
-		m.showInput = false
-		m.filterText = m.textInput.Value()
-		m.customFilterEnabled = true
-		m.updateListItems()
+		m.textInput.Blur()
 		m.list, _ = m.list.Update(msg)
 		return m, nil
 	default:
@@ -466,8 +458,11 @@ func (m *model) handleListRunes(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "c", "C":
 		return m.copyToClipboard()
 	case "/":
-		m.showInput = true
 		m.textInput.Focus()
+		m.textInput.SetValue("")
+		m.filterText = ""
+		m.customFilterEnabled = false
+		m.updateListItems()
 		return m, textinput.Blink
 	case "a", "A":
 		return m.startAdd()
@@ -630,12 +625,14 @@ func (m *model) viewHelp() string {
 }
 
 func (m *model) viewList() string {
-	var s string
-
-	if m.showInput {
-		s += "\n  Search: " + m.textInput.View() + "\n\n"
+	// Update list title based on search state
+	if m.textInput.Focused() {
+		m.list.Title = "Search: " + m.textInput.View()
+	} else {
+		m.list.Title = "Command Viewer - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
 	}
 
+	var s string
 	s += m.list.View()
 	s += m.renderStatusBar()
 	s += "\n"
@@ -675,7 +672,7 @@ func (m *model) renderItemDetails() string {
 	messageStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen))
 
 	desc := descStyle.Render(selectedItem.Desc)
-	tag := tagStyle.Render("Tag: " + selectedItem.Tag)
+	tag := tagStyle.Render(selectedItem.Tag)
 
 	if m.hasActiveMessage() {
 		msg := messageStyle.Render(m.message)
