@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/atotto/clipboard"
@@ -72,7 +73,7 @@ type Item struct {
 
 func (i Item) Title() string       { return i.Cmd }
 func (i Item) Description() string { return i.Desc }
-func (i Item) FilterValue() string { return fmt.Sprintf("%s %s %s", i.Cmd, i.Desc, i.Tag) }
+func (i Item) FilterValue() string { return i.Cmd }
 
 // itemDelegate handles list item rendering
 type itemDelegate struct{}
@@ -103,17 +104,18 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 
 // model holds the application state
 type model struct {
-	list         list.Model
-	items        []Item
-	textInput    textinput.Model
-	showInput    bool
-	mode         string
-	editingIndex int
-	editField    int
-	newItem      Item
-	message      string
-	messageTime  time.Time
-	filterText   string
+	list              list.Model
+	items             []Item
+	textInput         textinput.Model
+	showInput         bool
+	mode              string
+	editingIndex      int
+	editField         int
+	newItem           Item
+	message           string
+	messageTime       time.Time
+	filterText        string
+	customFilterEnabled bool
 }
 
 // loadItems loads items from the JSON file
@@ -151,13 +153,22 @@ func saveItems(items []Item) error {
 
 // updateListItems updates the list model with current items
 func (m *model) updateListItems() {
-	listItems := make([]list.Item, len(m.items))
-	for i, item := range m.items {
-		listItems[i] = item
-	}
-	m.list.SetItems(listItems)
-	if m.filterText != "" {
-		m.list.SetFilterText(m.filterText)
+	if m.customFilterEnabled && m.filterText != "" {
+		// Apply exact contains filtering on cmd and tag
+		var filtered []list.Item
+		for _, item := range m.items {
+			if strings.Contains(item.Cmd, m.filterText) || strings.Contains(item.Tag, m.filterText) {
+				filtered = append(filtered, item)
+			}
+		}
+		m.list.SetItems(filtered)
+	} else {
+		// Show all items
+		listItems := make([]list.Item, len(m.items))
+		for i, item := range m.items {
+			listItems[i] = item
+		}
+		m.list.SetItems(listItems)
 	}
 }
 
@@ -253,14 +264,26 @@ func (m *model) handleSearchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.textInput.SetValue("")
 		m.list.ResetFilter()
 		m.filterText = ""
+		m.customFilterEnabled = false
+		m.updateListItems()
 	case tea.KeyEnter:
 		m.showInput = false
 		m.filterText = m.textInput.Value()
+		m.customFilterEnabled = true
+		m.updateListItems()
+	case tea.KeyDown, tea.KeyUp:
+		m.showInput = false
+		m.filterText = m.textInput.Value()
+		m.customFilterEnabled = true
+		m.updateListItems()
+		m.list, _ = m.list.Update(msg)
+		return m, nil
 	default:
 		var cmd tea.Cmd
 		m.textInput, cmd = m.textInput.Update(msg)
-		m.list.SetFilterText(m.textInput.Value())
 		m.filterText = m.textInput.Value()
+		m.customFilterEnabled = true
+		m.updateListItems()
 		return m, cmd
 	}
 	return m, nil
@@ -415,6 +438,16 @@ func (m *model) handleListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
+	if msg.Type == tea.KeyEsc {
+		if m.customFilterEnabled {
+			m.customFilterEnabled = false
+			m.filterText = ""
+			m.textInput.SetValue("")
+			m.updateListItems()
+			return m, nil
+		}
+	}
+
 	switch msg.Type {
 	case tea.KeyRunes:
 		return m.handleListRunes(msg)
@@ -512,8 +545,8 @@ func (m *model) findItemIndex(item Item) int {
 
 func (m *model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	listHeight := msg.Height - paddingHeight
-	if listHeight < 1 {
-		listHeight = 1
+	if listHeight < 7 {
+		listHeight = 7
 	}
 	m.list.SetSize(msg.Width, listHeight)
 	return m, nil
