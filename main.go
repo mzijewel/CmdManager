@@ -41,6 +41,7 @@ const (
 	modeList          = "list"
 	modeAdd           = "add"
 	modeAddField      = "add_field"
+	modeEdit          = "edit"
 	modeEditField     = "edit_field"
 	modeConfirmDelete = "confirm_delete"
 	modeHelp          = "help"
@@ -109,6 +110,7 @@ type model struct {
 	editingIndex        int
 	editField           int
 	newItem             Item
+	editingItem         Item
 	message             string
 	messageTime         time.Time
 	filterText          string
@@ -246,6 +248,8 @@ func (m *model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleAddInput(msg)
 	case modeAddField:
 		return m.handleAddFieldInput(msg)
+	case modeEdit:
+		return m.handleEditInput(msg)
 	case modeEditField:
 		return m.handleEditFieldInput(msg)
 	case modeConfirmDelete:
@@ -309,6 +313,28 @@ func (m *model) handleAddInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
+func (m *model) handleEditInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyCtrlC, tea.KeyEsc:
+		m.mode = modeList
+		m.textInput.Blur()
+		return m, nil
+	case tea.KeyEnter:
+		m.editingItem.Cmd = m.textInput.Value()
+		m.mode = modeEditField
+		m.editField = fieldDesc
+		m.textInput.Placeholder = "Enter description..."
+		m.textInput.SetValue(m.editingItem.Desc)
+		m.textInput.CursorEnd()
+		m.textInput.Focus()
+		return m, textinput.Blink
+	default:
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
+	}
+}
+
 func (m *model) handleAddFieldInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC, tea.KeyEsc:
@@ -360,18 +386,9 @@ func (m *model) handleEditFieldInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *model) completeEditField() (tea.Model, tea.Cmd) {
 	switch m.editField {
-	case fieldCmd:
-		m.items[m.editingIndex].Cmd = m.textInput.Value()
-		m.editField = fieldDesc
-		m.textInput = textinput.New()
-		m.textInput.Placeholder = "Edit description..."
-		m.textInput.CharLimit = maxTextInputLen
-		m.textInput.Width = textInputWidth
-		m.textInput.SetValue(m.items[m.editingIndex].Desc)
-		m.textInput.Focus()
-		return m, textinput.Blink
 	case fieldDesc:
-		m.items[m.editingIndex].Desc = m.textInput.Value()
+		m.editingItem.Desc = m.textInput.Value()
+		m.items[m.editingIndex] = m.editingItem
 
 		if err := saveItems(m.items); err != nil {
 			m.showMessage("Error saving: " + err.Error())
@@ -504,14 +521,13 @@ func (m *model) startEdit() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.mode = modeEditField
+	m.mode = modeEdit
 	m.editingIndex = m.findItemIndex(selectedItem)
 	m.editField = fieldCmd
-	m.textInput = textinput.New()
-	m.textInput.Placeholder = "Edit command..."
-	m.textInput.CharLimit = maxTextInputLen
-	m.textInput.Width = textInputWidth
+	m.editingItem = m.items[m.editingIndex]
+	m.textInput.Placeholder = "Enter command..."
 	m.textInput.SetValue(m.items[m.editingIndex].Cmd)
+	m.textInput.CursorEnd()
 	m.textInput.Focus()
 	return m, textinput.Blink
 }
@@ -553,6 +569,8 @@ func (m model) View() string {
 		return m.viewAdd()
 	case modeAddField:
 		return m.viewAddField()
+	case modeEdit:
+		return m.viewEdit()
 	case modeEditField:
 		return m.viewEditField()
 	case modeConfirmDelete:
@@ -571,6 +589,13 @@ func (m *model) viewAdd() string {
 	return s
 }
 
+func (m *model) viewEdit() string {
+	s := "\n  Edit Command\n\n"
+	s += "  Command: " + m.textInput.View() + "\n\n"
+	s += "  (Enter to continue, Ctrl+C/Esc to cancel)"
+	return s
+}
+
 func (m *model) viewAddField() string {
 	s := "\n  Add New Command\n\n"
 	s += "  Command: " + m.newItem.Cmd + "\n"
@@ -580,14 +605,10 @@ func (m *model) viewAddField() string {
 }
 
 func (m *model) viewEditField() string {
-	fieldName := map[int]string{
-		fieldCmd:  "Command",
-		fieldDesc: "Description",
-	}[m.editField]
-
-	s := fmt.Sprintf("\n  Edit Item - Step %d\n\n", m.editField+1)
-	s += "  " + fieldName + ": " + m.textInput.View() + "\n\n"
-	s += "  (Enter to continue, Ctrl+C/Esc to cancel)"
+	s := "\n  Edit Description\n\n"
+	s += "  Command: " + m.editingItem.Cmd + "\n"
+	s += "  Description: " + m.textInput.View() + "\n\n"
+	s += "  (Enter to save, Ctrl+C/Esc to cancel)"
 	return s
 }
 
@@ -633,7 +654,7 @@ func (m *model) renderStatusBar() string {
 	}
 
 	return "\n" + lipgloss.NewStyle().
-		Background(lipgloss.Color(colorCyan)).
+		Background(lipgloss.Color(colorPurple)).
 		Foreground(lipgloss.Color(colorBlack)).
 		Bold(true).
 		Render(statusText)

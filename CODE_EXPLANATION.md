@@ -10,11 +10,12 @@ A Terminal UI (TUI) application built with Go and the [Bubble Tea](https://githu
 
 ```
 cmd/
-├── main.go           # Main application code
-├── data.json         # Command storage file
-├── go.mod            # Go module definition
-├── go.sum            # Dependency checksums
-└── README.md         # User documentation
+├── main.go              # Main application code
+├── data.json            # Command storage file (example)
+├── go.mod               # Go module definition
+├── go.sum               # Dependency checksums
+├── CODE_EXPLANATION.md  # This file - technical documentation
+└── README.md            # User documentation
 ```
 
 ---
@@ -28,22 +29,47 @@ type Item struct {
     Cmd  string `json:"cmd"`   // The command itself
     Desc string `json:"desc"`  // Command description
 }
+
+// Item implements list.Item interface
+func (i Item) Title() string       { return i.Cmd }
+func (i Item) Description() string { return i.Desc }
+func (i Item) FilterValue() string { return i.Cmd }
 ```
 
 Each command item has two fields:
 - **Cmd**: The actual shell command
 - **Desc**: Human-readable description
 
+### 2. Custom List Item Delegate
+
+```go
+type itemDelegate struct{}
+
+func (d itemDelegate) Height() int  { return 1 }
+func (d itemDelegate) Spacing() int { return 0 }
+
+func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+    // Renders each item with numbered index and styled command text
+    // Selected item has different background color
+}
+```
+
+The custom delegate controls how list items are displayed:
+- Shows item number in dim color
+- Shows command in cyan
+- Highlights selected item with background color
+
 ---
 
-### 2. Application States (Modes)
+### 3. Application States (Modes)
 
 ```go
 const (
     modeList          = "list"          // Main list view
-    modeAdd           = "add"           // Adding new command
-    modeAddField      = "add_field"     // Filling command fields
-    modeEditField     = "edit_field"    // Editing existing command
+    modeAdd           = "add"           // Adding new command (first field)
+    modeAddField      = "add_field"     // Adding description field
+    modeEdit          = "edit"          // Editing command field
+    modeEditField     = "edit_field"    // Editing description field
     modeConfirmDelete = "confirm_delete"// Delete confirmation
     modeHelp          = "help"          // Help screen
 )
@@ -51,22 +77,23 @@ const (
 
 ---
 
-### 3. Main Model Structure
+### 4. Main Model Structure
 
 ```go
 type model struct {
-    list              list.Model      // Bubble Tea list component
-    items             []Item          // All stored commands
-    textInput         textinput.Model // Search/add/edit input
-    mode              string          // Current application mode
-    editingIndex      int             // Index of item being edited
-    editField         int             // Which field is being edited
-    newItem           Item            // Command being added
-    message           string          // Status message
-    messageTime       time.Time       // When message was shown
-    filterText        string          // Current search query
+    list                list.Model      // Bubble Tea list component
+    items               []Item          // All stored commands
+    textInput           textinput.Model // Search/add/edit input
+    mode                string          // Current application mode
+    editingIndex        int             // Index of item being edited
+    editField           int             // Which field is being edited (0=cmd, 1=desc)
+    newItem             Item            // Command being added
+    editingItem         Item            // Copy of item being edited
+    message             string          // Status message
+    messageTime         time.Time       // When message was shown
+    filterText          string          // Current search query
     customFilterEnabled bool          // Is filter active?
-    windowWidth       int             // Terminal width for responsive UI
+    windowWidth         int             // Terminal width for responsive UI
 }
 ```
 
@@ -132,6 +159,7 @@ func (m *model) updateListItems() {
 | `q` | Quit application |
 | `Esc` | Clear filter / Cancel operation |
 | `↑` `↓` | Navigate list |
+| `y`/`n` | Confirm/cancel deletion |
 
 ---
 
@@ -161,13 +189,14 @@ func loadItems() ([]Item, error) {
 func saveItems(items []Item) error {
     dir := filepath.Dir(jsonFilePath)
     os.MkdirAll(dir, 0o755)  // Create directory if needed
-    
-    data, err := json.MarshalIndent(items, "", "    ")
-    if err != nil {
-        return err
-    }
-    
-    return os.WriteFile(jsonFilePath, data, 0o644)
+
+    var buf strings.Builder
+    encoder := json.NewEncoder(&buf)
+    encoder.SetEscapeHTML(false)  // Prevent HTML escaping
+    encoder.SetIndent("", "    ")
+    encoder.Encode(items)
+
+    return os.WriteFile(jsonFilePath, []byte(buf.String()), 0o644)
 }
 ```
 
@@ -180,19 +209,21 @@ func saveItems(items []Item) error {
 ### Adding a Command
 
 ```
-modeList → modeAdd → modeAddField (desc) → modeList
-     ↓         ↓            ↓
-   press     press       press
-    'a'     Enter       Enter
+modeList → modeAdd → modeAddField → modeList
+     ↓         ↓          ↓
+   press     press     press
+    'a'     Enter      Enter
+           (cmd)      (desc)
 ```
 
 ### Editing a Command
 
 ```
-modeList → modeEditField (cmd) → modeEditField (desc) → modeList
-     ↓            ↓                    ↓
-   press        press                press
-    'e'        Enter                Enter
+modeList → modeEdit → modeEditField → modeList
+     ↓         ↓           ↓
+   press     press      press
+    'e'     Enter       Enter
+           (cmd)      (desc)
 ```
 
 ### Deleting a Command
@@ -215,6 +246,10 @@ func (m model) View() string {
     switch m.mode {
     case modeAdd:
         return m.viewAdd()
+    case modeAddField:
+        return m.viewAddField()
+    case modeEdit:
+        return m.viewEdit()
     case modeEditField:
         return m.viewEditField()
     case modeConfirmDelete:
@@ -320,22 +355,42 @@ func (m *model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
         return m, nil
     }
 
-    // 2. Check if search input is focused
+    // 2. Handle mode-specific input
+    switch m.mode {
+    case modeAdd:
+        return m.handleAddInput(msg)
+    case modeAddField:
+        return m.handleAddFieldInput(msg)
+    case modeEdit:
+        return m.handleEditInput(msg)
+    case modeEditField:
+        return m.handleEditFieldInput(msg)
+    case modeConfirmDelete:
+        return m.handleDeleteConfirm(msg)
+    }
+
+    // 3. Check if search input is focused
     if m.textInput.Focused() {
         return m.handleSearchInput(msg)
     }
 
-    // 3. Handle mode-specific input
-    switch m.mode {
-    case modeAdd:
-        return m.handleAddInput(msg)
-    case modeEditField:
-        return m.handleEditFieldInput(msg)
-    // ...
-    }
-
     // 4. Handle list navigation
     return m.handleListKeys(msg)
+}
+```
+
+### Window Size Handler
+
+```go
+func (m *model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
+    m.windowWidth = msg.Width
+    listHeight := msg.Height - paddingHeight
+    if listHeight < 7 {
+        listHeight = 7
+    }
+    m.list.SetSize(msg.Width, listHeight)
+    m.textInput.Width = msg.Width - 20
+    return m, nil
 }
 ```
 
@@ -349,7 +404,25 @@ const (
     messageTimeout  = 3 * time.Second  // Status message duration
     maxTextInputLen = 0                // 0 = no limit
     textInputWidth  = 80               // Initial input width
-    paddingHeight   = 7                // UI padding for list height
+    paddingHeight   = 8                // UI padding for list height
+)
+
+// Color constants for lipgloss styling
+const (
+    colorDim    = "8"   // Dim gray
+    colorCyan   = "6"   // Cyan
+    colorGreen  = "2"   // Green
+    colorYellow = "3"   // Yellow
+    colorRed    = "1"   // Red
+    colorWhite  = "7"   // White
+    colorBlack  = "0"   // Black
+    colorPurple = "5"   // Purple
+)
+
+// Field constants for edit operations
+const (
+    fieldCmd  = 0  // Command field
+    fieldDesc = 1  // Description field
 )
 ```
 
@@ -359,11 +432,11 @@ const (
 
 | Package | Purpose |
 |---------|---------|
-| `bubbletea` | TUI framework |
-| `bubbles/list` | List component |
-| `bubbles/textinput` | Text input component |
-| `lipgloss` | Styling and colors |
-| `clipboard` | Copy to system clipboard |
+| `github.com/charmbracelet/bubbletea` | TUI framework |
+| `github.com/charmbracelet/bubbles/list` | List component |
+| `github.com/charmbracelet/bubbles/textinput` | Text input component |
+| `github.com/charmbracelet/lipgloss` | Styling and colors |
+| `github.com/atotto/clipboard` | Copy to system clipboard |
 
 ---
 
@@ -407,6 +480,48 @@ go build -o cmdviewer
 
 1. **Follow the State**: Track `m.mode` to understand which code path executes
 2. **Update → View**: Bubble Tea calls `Update()` for logic, then `View()` for rendering
-3. **Tea.Cmd**: Special commands returned from `Update()` for side effects (quit, clipboard, etc.)
+3. **Tea.Cmd**: Special commands returned from `Update()` for side effects (quit, clipboard, textinput.Blink)
 4. **Filter Logic**: Search creates a filtered copy of items, not modifying the original list
 5. **Persistence**: All changes save to JSON immediately after modification
+6. **State Copies**: When editing, a copy (`editingItem`) is made to allow cancellation
+7. **Helper Methods**: Complex operations are split into helper methods:
+   - `handle*()` methods process input for each mode
+   - `view*()` methods render each view
+   - `start*()` methods initialize add/edit/delete operations
+   - `complete*()` methods finalize add/edit operations
+
+---
+
+## Helper Functions
+
+### Data Loading/Saving
+
+| Function | Purpose |
+|----------|---------|
+| `loadItems()` | Load commands from JSON file |
+| `saveItems()` | Save commands to JSON file |
+| `updateListItems()` | Refresh list with filtered/unfiltered items |
+
+### UI Helpers
+
+| Function | Purpose |
+|----------|---------|
+| `setupTextInput()` | Configure text input component |
+| `newListItem()` | Create list with default settings |
+| `showMessage()` | Display temporary status message |
+| `hasActiveMessage()` | Check if message is still visible |
+| `renderStatusBar()` | Render status bar with item count |
+| `renderItemDetails()` | Render selected item description |
+
+### State Transition Helpers
+
+| Function | Purpose |
+|----------|---------|
+| `startAdd()` | Initialize add command mode |
+| `startEdit()` | Initialize edit command mode |
+| `startDelete()` | Initialize delete confirmation mode |
+| `completeAddField()` | Finalize adding new command |
+| `completeEditField()` | Finalize editing command |
+| `deleteItem()` | Remove item and save |
+| `copyToClipboard()` | Copy selected command to clipboard |
+| `findItemIndex()` | Find index of item in items slice |
