@@ -19,8 +19,8 @@ import (
 const (
 	dataFileName    = "data.json"
 	messageTimeout  = 3 * time.Second
-	maxTextInputLen = 50
-	textInputWidth  = 30
+	maxTextInputLen = 0
+	textInputWidth  = 80
 	paddingHeight   = 7
 )
 
@@ -116,6 +116,7 @@ type model struct {
 	messageTime       time.Time
 	filterText        string
 	customFilterEnabled bool
+	windowWidth       int
 }
 
 // loadItems loads items from the JSON file
@@ -154,10 +155,10 @@ func saveItems(items []Item) error {
 // updateListItems updates the list model with current items
 func (m *model) updateListItems() {
 	if m.customFilterEnabled && m.filterText != "" {
-		// Apply exact contains filtering on cmd and tag
+		// Apply exact contains filtering on cmd, desc, and tag
 		var filtered []list.Item
 		for _, item := range m.items {
-			if strings.Contains(item.Cmd, m.filterText) || strings.Contains(item.Tag, m.filterText) {
+			if strings.Contains(item.Cmd, m.filterText) || strings.Contains(item.Desc, m.filterText) || strings.Contains(item.Tag, m.filterText) {
 				filtered = append(filtered, item)
 			}
 		}
@@ -184,6 +185,7 @@ func setupTextInput() textinput.Model {
 	ti.Placeholder = "Type to search..."
 	ti.CharLimit = maxTextInputLen
 	ti.Width = textInputWidth
+	ti.Prompt = ""
 	return ti
 }
 
@@ -544,11 +546,13 @@ func (m *model) findItemIndex(item Item) int {
 }
 
 func (m *model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
+	m.windowWidth = msg.Width
 	listHeight := msg.Height - paddingHeight
 	if listHeight < 7 {
 		listHeight = 7
 	}
 	m.list.SetSize(msg.Width, listHeight)
+	m.textInput.Width = msg.Width - 20
 	return m, nil
 }
 
