@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -132,6 +133,11 @@ func loadItems() ([]Item, error) {
 	if err := json.Unmarshal(data, &items); err != nil {
 		return nil, err
 	}
+
+	// Sort items by Cmd in ascending order
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].Cmd < items[j].Cmd
+	})
 
 	return items, nil
 }
