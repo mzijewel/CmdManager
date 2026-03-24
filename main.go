@@ -462,6 +462,8 @@ func (m *model) handleListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyRunes:
 		return m.handleListRunes(msg)
+	case tea.KeyEnter:
+		return m.copyToClipboard()
 	}
 
 	// Pass through navigation keys (up, down, etc.) to the list
@@ -503,7 +505,7 @@ func (m *model) copyToClipboard() (tea.Model, tea.Cmd) {
 	}
 
 	if err := clipboard.WriteAll(selectedItem.Cmd); err == nil {
-		m.showMessage("Copied to clipboard: " + selectedItem.Cmd)
+		return m, tea.Quit
 	} else {
 		m.showMessage("Failed to copy: " + err.Error())
 	}
