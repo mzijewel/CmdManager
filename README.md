@@ -57,4 +57,4 @@ Commands are stored in `home/.cmdviewer/data.json` in the application directory.
 
 ## Demo
 
-<img src="demo.gif" height=300/>
+<img src="demo.gif" height=600/>
