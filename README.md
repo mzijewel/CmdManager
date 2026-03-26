@@ -13,19 +13,19 @@ A terminal-based UI application for managing and viewing command snippets. Built
 ## Installation
 
 ```bash
-go build -o cmdviewer
+go build -o cmdmanager
 ```
 
 ## Usage
 
 ```bash
-./cmdviewer
+./cmdmanager
 ```
 
 ### Help
 
 ```bash
-./cmdviewer --help
+./cmdmanager --help
 ```
 
 ## Keybindings
@@ -42,7 +42,7 @@ go build -o cmdviewer
 
 ## Data Storage
 
-Commands are stored in `home/.cmdviewer/data.json` in the application directory.
+Commands are stored in `home/.cmdmanager/data.json` in the application directory.
 
 **JSON Structure:**
 ```json
