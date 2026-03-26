@@ -1,4 +1,4 @@
-# Command Viewer
+# Command Manager
 
 A terminal-based UI application for managing and viewing command snippets. Built with Go and Bubble Tea.
 
@@ -13,19 +13,19 @@ A terminal-based UI application for managing and viewing command snippets. Built
 ## Installation
 
 ```bash
-go build -o cmdviewer
+go build -o cmdmanager
 ```
 
 ## Usage
 
 ```bash
-./cmdviewer
+./cmdmanager
 ```
 
 ### Help
 
 ```bash
-./cmdviewer --help
+./cmdmanager --help
 ```
 
 ## Keybindings
@@ -42,28 +42,19 @@ go build -o cmdviewer
 
 ## Data Storage
 
-Commands are stored in `home/.cmdviewer/data.json` in the application directory.
+Commands are stored in `home/.cmdmanager/data.json` in the application directory.
 
 **JSON Structure:**
 ```json
 [
   {
     "cmd": "adb devices",
-    "desc": "show connected devices",
-    "tag": "adb"
+    "desc": "show connected devices"
   }
 ]
 ```
 
-## Requirements
 
-- Go 1.19+
-- Terminal with true color support (recommended)
+## Demo
 
-
-## Screenshots
-
-<div>
-  <img src="screenshots/1.png" height="600"/>
-  <img src="screenshots/2.png" height="300"/>
-</div>
+<img src="demo.gif" height=600/>

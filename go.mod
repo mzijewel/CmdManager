@@ -1,4 +1,4 @@
-module cmdviewer
+module cmdmanager
 
 go 1.25.5
 

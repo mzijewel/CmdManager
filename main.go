@@ -61,7 +61,7 @@ func init() {
 	if err != nil {
 		homeDir = "."
 	}
-	jsonFilePath = filepath.Join(homeDir, ".cmdviewer", dataFileName)
+	jsonFilePath = filepath.Join(homeDir, ".cmdmanager", dataFileName)
 	// jsonFilePath = "./" + dataFileName
 }
 
@@ -200,7 +200,7 @@ func setupTextInput() textinput.Model {
 // newListItem creates a new list model with default settings
 func newListItem(items []list.Item) list.Model {
 	l := list.New(items, itemDelegate{}, 0, 0)
-	l.Title = "Command Viewer - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
+	l.Title = "Command Manager - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
 	return l
@@ -277,13 +277,13 @@ func (m *model) handleSearchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filterText = ""
 		m.customFilterEnabled = false
 		m.updateListItems()
-		m.list.Title = "Command Viewer - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
+		m.list.Title = "Command Manager - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
 	case tea.KeyEnter:
 		m.textInput.Blur()
-		m.list.Title = "Command Viewer - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
+		m.list.Title = "Command Manager - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
 	case tea.KeyDown, tea.KeyUp:
 		m.textInput.Blur()
-		m.list.Title = "Command Viewer - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
+		m.list.Title = "Command Manager - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
 		m.list, _ = m.list.Update(msg)
 		return m, nil
 	default:
@@ -462,6 +462,8 @@ func (m *model) handleListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyRunes:
 		return m.handleListRunes(msg)
+	case tea.KeyEnter:
+		return m.copyToClipboard()
 	}
 
 	// Pass through navigation keys (up, down, etc.) to the list
@@ -503,7 +505,7 @@ func (m *model) copyToClipboard() (tea.Model, tea.Cmd) {
 	}
 
 	if err := clipboard.WriteAll(selectedItem.Cmd); err == nil {
-		m.showMessage("Copied to clipboard: " + selectedItem.Cmd)
+		return m, tea.Quit
 	} else {
 		m.showMessage("Failed to copy: " + err.Error())
 	}
@@ -626,7 +628,7 @@ func (m *model) viewConfirmDelete() string {
 }
 
 func (m *model) viewHelp() string {
-	s := "\n  Help - Command Viewer\n\n"
+	s := "\n  Help - Command Manager\n\n"
 	s += "  JSON file: " + jsonFilePath + "\n\n"
 	s += "  Keybindings:\n"
 	s += "    c    Copy command to clipboard\n"
@@ -701,10 +703,10 @@ func (m *model) hasActiveMessage() bool {
 }
 
 func printHelp() {
-	fmt.Println("Command Viewer - TUI for managing commands")
+	fmt.Println("Command Manager - TUI for managing commands")
 	fmt.Println()
 	fmt.Println("Usage:")
-	fmt.Println("  cmdviewer [options]")
+	fmt.Println("  cmdmanager [options]")
 	fmt.Println()
 	fmt.Println("Options:")
 	fmt.Println("  -h, --help    Show this help message")

@@ -1,4 +1,4 @@
-# Command Viewer - Code Explanation
+# Command Manager - Code Explanation
 
 ## Overview
 
@@ -200,7 +200,7 @@ func saveItems(items []Item) error {
 }
 ```
 
-**Storage Location**: `~/.cmdviewer/data.json`
+**Storage Location**: `~/.cmdmanager/data.json`
 
 ---
 
@@ -269,7 +269,7 @@ func (m *model) viewList() string {
     if m.textInput.Focused() {
         m.list.Title = "Search: " + m.textInput.View()
     } else {
-        m.list.Title = "Command Viewer - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
+        m.list.Title = "Command Manager - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
     }
 
     var s string
@@ -444,13 +444,13 @@ const (
 
 ```bash
 # Build
-go build -o cmdviewer
+go build -o cmdmanager
 
 # Run
-./cmdviewer
+./cmdmanager
 
 # Show help
-./cmdviewer --help
+./cmdmanager --help
 ```
 
 ---
