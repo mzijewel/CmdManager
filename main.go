@@ -19,6 +19,7 @@ import (
 
 const (
 	dataFileName    = "data.json"
+	configFileName  = "config.json"
 	messageTimeout  = 3 * time.Second
 	maxTextInputLen = 0
 	textInputWidth  = 80
@@ -46,6 +47,7 @@ const (
 	modeEditField     = "edit_field"
 	modeConfirmDelete = "confirm_delete"
 	modeHelp          = "help"
+	modeChangePath    = "change_path"
 )
 
 // Fields
@@ -55,14 +57,61 @@ const (
 )
 
 var jsonFilePath string
+var configFilePath string
 
 func init() {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		homeDir = "."
 	}
-	jsonFilePath = filepath.Join(homeDir, ".cmdmanager", dataFileName)
-	// jsonFilePath = "./" + dataFileName
+	configDir := filepath.Join(homeDir, ".cmdmanager")
+	configFilePath = filepath.Join(configDir, configFileName)
+	
+	// Default data path
+	jsonFilePath = filepath.Join(".", ".data.json")
+	
+	// Load config and override data path if set
+	config, err := loadConfig()
+	if err == nil && config.DataPath != "" {
+		jsonFilePath = config.DataPath
+	}
+}
+
+// loadConfig loads configuration from config file
+func loadConfig() (*Config, error) {
+	data, err := os.ReadFile(configFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Return default config if file doesn't exist
+			return &Config{DataPath: ""}, nil
+		}
+		return nil, err
+	}
+
+	var config Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, err
+	}
+
+	return &config, nil
+}
+
+// saveConfig saves configuration to config file
+func saveConfig(config *Config) error {
+	dir := filepath.Dir(configFilePath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	var buf strings.Builder
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "    ")
+	if err := encoder.Encode(config); err != nil {
+		return err
+	}
+
+	return os.WriteFile(configFilePath, []byte(buf.String()), 0o644)
 }
 
 // Item represents a command item
@@ -74,6 +123,11 @@ type Item struct {
 func (i Item) Title() string       { return i.Cmd }
 func (i Item) Description() string { return i.Desc }
 func (i Item) FilterValue() string { return i.Cmd }
+
+// Config represents the application configuration
+type Config struct {
+	DataPath string `json:"dataPath"`
+}
 
 // itemDelegate handles list item rendering
 type itemDelegate struct{}
@@ -117,6 +171,7 @@ type model struct {
 	filterText          string
 	customFilterEnabled bool
 	windowWidth         int
+	tempDataPath        string
 }
 
 // loadItems loads items from the JSON file
@@ -200,7 +255,7 @@ func setupTextInput() textinput.Model {
 // newListItem creates a new list model with default settings
 func newListItem(items []list.Item) list.Model {
 	l := list.New(items, itemDelegate{}, 0, 0)
-	l.Title = "Command Manager - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
+	l.Title = "Command Manager - C: Copy, A: Add, E: Edit, D: Delete, P: Path, /: Search, ?: Help"
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
 	return l
@@ -260,6 +315,8 @@ func (m *model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleEditFieldInput(msg)
 	case modeConfirmDelete:
 		return m.handleDeleteConfirm(msg)
+	case modeChangePath:
+		return m.handleChangePathInput(msg)
 	}
 
 	if m.textInput.Focused() {
@@ -277,13 +334,13 @@ func (m *model) handleSearchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filterText = ""
 		m.customFilterEnabled = false
 		m.updateListItems()
-		m.list.Title = "Command Manager - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
+		m.list.Title = "Command Manager - C: Copy, A: Add, E: Edit, D: Delete, P: Path, /: Search, ?: Help"
 	case tea.KeyEnter:
 		m.textInput.Blur()
-		m.list.Title = "Command Manager - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
+		m.list.Title = "Command Manager - C: Copy, A: Add, E: Edit, D: Delete, P: Path, /: Search, ?: Help"
 	case tea.KeyDown, tea.KeyUp:
 		m.textInput.Blur()
-		m.list.Title = "Command Manager - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
+		m.list.Title = "Command Manager - C: Copy, A: Add, E: Edit, D: Delete, P: Path, /: Search, ?: Help"
 		m.list, _ = m.list.Update(msg)
 		return m, nil
 	default:
@@ -409,6 +466,58 @@ func (m *model) completeEditField() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *model) handleChangePathInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyCtrlC, tea.KeyEsc:
+		m.mode = modeList
+		m.textInput.Blur()
+		return m, nil
+	case tea.KeyEnter:
+		return m.completeChangePath()
+	default:
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
+	}
+}
+
+func (m *model) completeChangePath() (tea.Model, tea.Cmd) {
+	newPath := m.textInput.Value()
+	if newPath == "" {
+		m.mode = modeList
+		m.textInput.Blur()
+		m.showMessage("Path change cancelled")
+		return m, nil
+	}
+
+	// Save new path to config
+	config := &Config{DataPath: newPath}
+	if err := saveConfig(config); err != nil {
+		m.showMessage("Error saving config: " + err.Error())
+		m.mode = modeList
+		m.textInput.Blur()
+		return m, nil
+	}
+
+	// Update global jsonFilePath
+	jsonFilePath = newPath
+
+	// Reload items from new path
+	items, err := loadItems()
+	if err != nil {
+		m.showMessage("Error loading from new path: " + err.Error())
+	} else {
+		m.items = items
+		m.updateListItems()
+		m.showMessage("Data path changed to: " + newPath)
+	}
+
+	m.mode = modeList
+	m.textInput.Blur()
+	m.textInput.SetValue("")
+	return m, nil
+}
+
 func (m *model) handleDeleteConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyRunes:
@@ -490,6 +599,8 @@ func (m *model) handleListRunes(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.startEdit()
 	case "d", "D":
 		return m.startDelete()
+	case "p", "P":
+		return m.startChangePath()
 	}
 	return m, nil
 }
@@ -551,6 +662,14 @@ func (m *model) startDelete() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *model) startChangePath() (tea.Model, tea.Cmd) {
+	m.mode = modeChangePath
+	m.textInput.Placeholder = "Enter new data path (e.g., ./data.json or ~/.cmdmanager/data.json)..."
+	m.textInput.SetValue("")
+	m.textInput.Focus()
+	return m, textinput.Blink
+}
+
 func (m *model) findItemIndex(item Item) int {
 	for i, it := range m.items {
 		if it.Cmd == item.Cmd && it.Desc == item.Desc {
@@ -585,6 +704,8 @@ func (m model) View() string {
 		return m.viewConfirmDelete()
 	case modeHelp:
 		return m.viewHelp()
+	case modeChangePath:
+		return m.viewChangePath()
 	}
 
 	return m.viewList()
@@ -627,14 +748,23 @@ func (m *model) viewConfirmDelete() string {
 	return s
 }
 
+func (m *model) viewChangePath() string {
+	s := "\n  Change Data Path\n\n"
+	s += "  Current path: " + jsonFilePath + "\n"
+	s += "  New path: " + m.textInput.View() + "\n\n"
+	s += "  (Enter to save, Ctrl+C/Esc to cancel)"
+	return s
+}
+
 func (m *model) viewHelp() string {
 	s := "\n  Help - Command Manager\n\n"
-	s += "  JSON file: " + jsonFilePath + "\n\n"
+	s += "  Data file: " + jsonFilePath + "\n\n"
 	s += "  Keybindings:\n"
 	s += "    c    Copy command to clipboard\n"
 	s += "    a    Add new command\n"
 	s += "    e    Edit command\n"
 	s += "    d    Delete command\n"
+	s += "    p    Change data path\n"
 	s += "    /    Search commands\n"
 	s += "    ?    Show this help\n"
 	s += "    q    Quit\n\n"
@@ -711,7 +841,7 @@ func printHelp() {
 	fmt.Println("Options:")
 	fmt.Println("  -h, --help    Show this help message")
 	fmt.Println()
-	fmt.Println("JSON file path:")
+	fmt.Println("Data file path:")
 	fmt.Printf("  %s\n", jsonFilePath)
 	fmt.Println()
 	fmt.Println("Keybindings:")
@@ -719,6 +849,7 @@ func printHelp() {
 	fmt.Println("  a    Add new command")
 	fmt.Println("  e    Edit command")
 	fmt.Println("  d    Delete command")
+	fmt.Println("  p    Change data path")
 	fmt.Println("  /    Search commands")
 	fmt.Println("  q    Quit")
 }
