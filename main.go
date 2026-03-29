@@ -25,12 +25,13 @@ var (
 	colorTitle    = tcell.ColorDarkCyan
 	colorSelected = tcell.ColorDarkCyan
 	colorNormal   = tcell.ColorWhite
-	colorHelp     = tcell.ColorYellow
+	colorHelp     = tcell.ColorBlue
 	colorError    = tcell.ColorRed
 	colorSuccess  = tcell.ColorGreen
 	colorStatusBg = tcell.ColorPurple
 	colorStatusFg = tcell.ColorBlack
 	colorWhite    = tcell.ColorWhite
+	colorContent  = tcell.ColorBlack
 )
 
 var (
@@ -52,7 +53,7 @@ var (
 	addForm        *tview.Flex
 	editForm       *tview.Flex
 	changePathFlex *tview.Flex
-	helpModal      *tview.Modal
+	helpModal      *tview.Flex
 	deleteModal    *tview.Flex
 	searchInput    *tview.Flex
 	mainPages      *tview.Pages
@@ -171,11 +172,21 @@ func updateList() {
 
 	for i, item := range items {
 		if filterText == "" || strings.Contains(item.Cmd, filterText) || strings.Contains(item.Desc, filterText) {
-			display := fmt.Sprintf("%d. %s", i+1, item.Cmd)
-			commandList.AddItem(display, item.Desc, 0, nil)
+			display := fmt.Sprintf("[gray][%d] [black]%s", i+1, item.Cmd)
+			commandList.AddItem(display, "", 0, nil)
 			filteredItems = append(filteredItems, item)
 		}
 	}
+
+	// Update list title with item count
+	total := len(items)
+	filtered := len(filteredItems)
+	if filtered != total {
+		commandList.SetTitle(fmt.Sprintf(" Commands [%d/%d] ", filtered, total))
+	} else {
+		commandList.SetTitle(fmt.Sprintf(" Commands [%d] ", total))
+	}
+	commandList.SetTitleColor(colorTitle)
 
 	// Reset selected index if out of bounds
 	if selectedIndex >= len(filteredItems) {
@@ -191,14 +202,7 @@ func updateList() {
 
 // updateStatusBar updates the status bar text
 func updateStatusBar() {
-	total := len(items)
-	filtered := commandList.GetItemCount()
-
-	if filtered != total {
-		statusBar.SetText(fmt.Sprintf(" Showing: %d of %d items | Press ? for help", filtered, total))
-	} else {
-		statusBar.SetText(fmt.Sprintf(" Total: %d items | Press ? for help", total))
-	}
+	statusBar.SetText(fmt.Sprintf(" [%s]<c> Copy   <a> Add   <e> Edit   <d> Delete   <p> Path   </> Search   <?> Help   <q> Quit ", colorHelp.String()))
 }
 
 // updateDetails updates the details panel with selected item
@@ -210,7 +214,7 @@ func updateDetails() {
 
 	if selectedIndex >= 0 && selectedIndex < len(filteredItems) {
 		item := filteredItems[selectedIndex]
-		detailsText.SetText(fmt.Sprintf("[%s]%s[-:-:-]", colorWhite.String(), item.Desc))
+		detailsText.SetText(fmt.Sprintf("[%s]%s", colorContent.String(), item.Desc))
 	} else {
 		detailsText.SetText("")
 	}
@@ -262,9 +266,7 @@ func createMainFlex() *tview.Flex {
 
 	statusBar = tview.NewTextView().
 		SetDynamicColors(true).
-		SetTextAlign(tview.AlignLeft)
-
-	statusBar.SetBackgroundColor(colorStatusBg)
+		SetTextAlign(tview.AlignCenter)
 
 	// First row: 2 columns (list and details)
 	firstRow := tview.NewFlex().SetDirection(tview.FlexColumn).
@@ -321,22 +323,20 @@ type EntryFormConfig struct {
 
 // createEntryForm creates a reusable form for adding or editing commands
 func createEntryForm(config EntryFormConfig) *tview.Flex {
-	cmdInput := tview.NewInputField().SetFieldBackgroundColor(tcell.ColorReset)
+	cmdInput := tview.NewInputField().
+		SetFieldBackgroundColor(tcell.ColorReset)
 
 	cmdInput.SetBorder(true).
 		SetTitle(fmt.Sprintf(" Command ----- [%s]<Enter> Next ", colorHelp.String())).
 		SetTitleColor(colorTitle).
 		SetTitleAlign(tview.AlignLeft)
 
-	if config.InitialCmd != "" {
-		cmdInput.SetText(config.InitialCmd)
-	}
+	cmdInput.SetText(config.InitialCmd).SetFieldTextColor(tcell.ColorBlack)
 
 	// Description text view for multiline input
 	descText := tview.NewTextArea()
-	if config.InitialDesc != "" {
-		descText.SetText(config.InitialDesc, true)
-	}
+	descText.SetText(config.InitialDesc, true)
+	descText.SetTextStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack))
 
 	descText.SetBorder(true).
 		SetTitle(fmt.Sprintf(" Description ----- [%s]<Ctrl+S> Save, <Esc> Cancel ", colorHelp.String())).
@@ -419,7 +419,7 @@ func createChangePathOverlay() *tview.Flex {
 	// Path input field with border and title
 	pathInput := tview.NewInputField().
 		SetFieldBackgroundColor(tcell.ColorReset).
-		SetText(jsonFilePath)
+		SetText(jsonFilePath).SetFieldTextColor(tcell.ColorBlack)
 
 	pathInput.SetBorder(true).
 		SetTitle(fmt.Sprintf(" New Path ----- [%s]<Enter> save) ", colorHelp.String())).
@@ -483,31 +483,46 @@ func createChangePathOverlay() *tview.Flex {
 	return overlay
 }
 
-// createHelpModal creates the help modal
-func createHelpModal() *tview.Modal {
-	modal := tview.NewModal().
+// createHelpModal creates the help modal as a centered overlay
+func createHelpModal() *tview.Flex {
+	text := tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignLeft).
 		SetText(
-			"Command Manager - Keybindings\n\n" +
-				"c     Copy command to clipboard\n" +
-				"a     Add new command\n" +
-				"e     Edit command\n" +
-				"d     Delete command\n" +
-				"p     Change data path\n" +
-				"/     Search/filter commands\n" +
-				"?     Show this help\n" +
-				"q     Quit\n\n" +
-				fmt.Sprintf("Data file: %s", jsonFilePath),
-		).
-		AddButtons([]string{"Close"}).
-		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-			mainPages.RemovePage("help")
-			app.SetFocus(commandList)
-		})
+			"[black]c     Copy command to clipboard\n" +
+				"[black]a     Add new command\n" +
+				"[black]e     Edit command\n" +
+				"[black]d     Delete command\n" +
+				"[black]p     Change data path\n" +
+				"[black]/     Search/filter commands\n" +
+				"[black]?     Show this help\n" +
+				"[black]q     Quit",
+		)
 
-	modal.SetBackgroundColor(colorStatusBg).
-		SetTextColor(colorStatusFg)
+	text.SetBorder(true).
+		SetTitle(" Keybindings ").
+		SetTitleColor(colorTitle)
 
-	return modal
+	text.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Any key closes the help modal
+		mainPages.RemovePage("help")
+		app.SetFocus(commandList)
+		return nil
+	})
+
+	// Centered overlay
+	overlay := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
+			AddItem(nil, 0, 1, false).
+			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(nil, 0, 1, false).
+				AddItem(text, 15, 0, true).
+				AddItem(nil, 0, 1, false), 60, 0, true).
+			AddItem(nil, 0, 1, false), 0, 1, false).
+		AddItem(nil, 0, 1, false)
+
+	return overlay
 }
 
 // createDeleteModal creates the delete confirmation modal (no bg color, no buttons)
@@ -526,10 +541,10 @@ func createDeleteModal(filteredIndex int) *tview.Flex {
 	text := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter).
-		SetText(fmt.Sprintf("Delete \"[%s]%s[-]\"?", colorError.String(), filteredItem.Cmd))
+		SetText(fmt.Sprintf(" [%s]%s[-]\"?", colorError.String(), filteredItem.Cmd))
 
 	text.SetBorder(true).
-		SetTitle(" Confirm Delete ").
+		SetTitle(fmt.Sprintf(" Confirm Delete ----- [%s] <Enter> Yes ", colorHelp.String())).
 		SetTitleColor(colorTitle)
 
 	text.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -583,9 +598,11 @@ func createSearchInput() *tview.Flex {
 	input := tview.NewInputField().SetFieldBackgroundColor(tcell.ColorReset)
 
 	input.SetBorder(true).
-		SetTitle(" Search (type to filter, Enter/Esc to close) ").
+		SetTitle(" Search ").
 		SetTitleColor(colorTitle).
 		SetTitleAlign(tview.AlignLeft)
+
+	input.SetFieldTextColor(tcell.ColorBlack)
 
 	input.SetChangedFunc(func(text string) {
 		filterText = text
@@ -793,7 +810,9 @@ func showChangePathForm() {
 func showHelp() {
 	helpModal = createHelpModal()
 	mainPages.AddPage("help", helpModal, true, true)
-	app.SetFocus(helpModal)
+
+	textItem := helpModal.GetItem(1).(*tview.Flex).GetItem(1).(*tview.Flex).GetItem(1).(*tview.TextView)
+	app.SetFocus(textItem)
 }
 
 // showSearch shows the search input
@@ -847,6 +866,8 @@ func main() {
 
 	// Create application
 	app = tview.NewApplication()
+	tview.Styles.BorderColor = colorBorder
+	tview.Styles.PrimitiveBackgroundColor = tcell.ColorReset
 
 	// Create main layout
 	mainFlex = createMainFlex()
