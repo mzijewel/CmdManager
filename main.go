@@ -35,34 +35,41 @@ var (
 )
 
 var (
-	jsonFilePath   string
-	configFilePath string
-	app            *tview.Application
-	mainFlex       *tview.Flex
-	commandList    *tview.List
-	detailsText    *tview.TextView
-	statusBar      *tview.TextView
-	items          []Item
-	filteredItems  []Item
-	selectedIndex  int
-	filterText     string
-	currentMode    string
-	message        string
-	messageTimer   *time.Timer
-	tempDataPath   string
-	addForm        *tview.Flex
-	editForm       *tview.Flex
-	changePathFlex *tview.Flex
-	helpModal      *tview.Flex
-	deleteModal    *tview.Flex
-	searchInput    *tview.Flex
-	mainPages      *tview.Pages
+	jsonFilePath     string
+	configFilePath   string
+	app              *tview.Application
+	mainFlex         *tview.Flex
+	commandList      *tview.List
+	detailsText      *tview.TextView
+	statusBar        *tview.TextView
+	items            []Item
+	filteredItems    []Item
+	selectedIndex    int
+	selectedItemKeys map[string]bool
+	rebuildingList   bool
+	filterText       string
+	currentMode      string
+	message          string
+	messageTimer     *time.Timer
+	tempDataPath     string
+	addForm          *tview.Flex
+	editForm         *tview.Flex
+	changePathFlex   *tview.Flex
+	helpModal        *tview.Flex
+	deleteModal      *tview.Flex
+	searchInput      *tview.Flex
+	mainPages        *tview.Pages
 )
 
 // Item represents a command item
 type Item struct {
 	Cmd  string `json:"cmd"`
 	Desc string `json:"desc"`
+}
+
+// itemKey returns a unique key for an item based on its command and description
+func itemKey(item Item) string {
+	return item.Cmd + "\x00" + item.Desc
 }
 
 // Config represents the application configuration
@@ -86,6 +93,14 @@ func init() {
 	if err == nil && config.DataPath != "" {
 		jsonFilePath = config.DataPath
 	}
+
+	// Initialize selection map
+	selectedItemKeys = make(map[string]bool)
+}
+
+// clearSelection removes all selected items
+func clearSelection() {
+	selectedItemKeys = make(map[string]bool)
 }
 
 // loadConfig loads configuration from config file
@@ -166,34 +181,55 @@ func saveItems(items []Item) error {
 }
 
 // updateList updates the command list with current items and filter
-func updateList() {
+func updateList(clearSel bool) {
+
+	rebuildingList = true
+	defer func() { rebuildingList = false }()
 	commandList.Clear()
 	filteredItems = []Item{}
+	if clearSel {
+		clearSelection() // Clear selection when list is rebuilt (e.g., filter changed)
+	}
 
+	filteredIdx := 0
 	for i, item := range items {
 		if filterText == "" || strings.Contains(item.Cmd, filterText) || strings.Contains(item.Desc, filterText) {
-			display := fmt.Sprintf("[gray][%d] [black]%s", i+1, item.Cmd)
+			var display string
+			if selectedItemKeys[itemKey(item)] {
+				display = fmt.Sprintf("[green][✓] [black]%s", item.Cmd)
+			} else {
+				display = fmt.Sprintf("[gray][%d] [black]%s", i+1, item.Cmd)
+			}
 			commandList.AddItem(display, "", 0, nil)
 			filteredItems = append(filteredItems, item)
+			filteredIdx++
 		}
 	}
 
-	// Update list title with item count
+	// Update list title with item count and selected count
 	total := len(items)
 	filtered := len(filteredItems)
-	if filtered != total {
-		commandList.SetTitle(fmt.Sprintf(" Commands [%d/%d] ", filtered, total))
-	} else {
-		commandList.SetTitle(fmt.Sprintf(" Commands [%d] ", total))
+	selected := len(selectedItemKeys)
+	title := fmt.Sprintf(" Commands [%d/%d] ", filtered, total)
+	if selected > 0 {
+		title = fmt.Sprintf(" Commands [%d/%d] (Selected: %d) ", filtered, total, selected)
 	}
+	commandList.SetTitle(title)
 	commandList.SetTitleColor(colorTitle)
 
 	// Reset selected index if out of bounds
 	if selectedIndex >= len(filteredItems) {
+
 		selectedIndex = len(filteredItems) - 1
 	}
 	if selectedIndex < 0 && len(filteredItems) > 0 {
+
 		selectedIndex = 0
+	}
+	// Restore cursor position
+	if len(filteredItems) > 0 && selectedIndex >= 0 {
+
+		commandList.SetCurrentItem(selectedIndex)
 	}
 
 	updateStatusBar()
@@ -202,7 +238,12 @@ func updateList() {
 
 // updateStatusBar updates the status bar text
 func updateStatusBar() {
-	statusBar.SetText(fmt.Sprintf(" [%s]<c> Copy   <a> Add   <e> Edit   <d> Delete   <p> Path   </> Search   <?> Help   <q> Quit ", colorHelp.String()))
+	selectedCount := len(selectedItemKeys)
+	prefix := ""
+	if selectedCount > 0 {
+		prefix = fmt.Sprintf(" [%s]Selected: %d[-] |", colorSuccess.String(), selectedCount)
+	}
+	statusBar.SetText(fmt.Sprintf("%s [%s]<Space> Select   <u> Clear   <c> Copy   <a> Add   <e> Edit   <d> Delete   <p> Path   </> Search   <?> Help   <q> Quit ", prefix, colorHelp.String()))
 }
 
 // updateDetails updates the details panel with selected item
@@ -248,6 +289,10 @@ func createMainFlex() *tview.Flex {
 		SetTitleColor(colorTitle)
 
 	commandList.SetChangedFunc(func(index int, mainText string, secondaryText string, shortcut rune) {
+
+		if rebuildingList {
+			return
+		}
 		selectedIndex = index
 		updateDetails()
 	})
@@ -456,7 +501,7 @@ func createChangePathOverlay() *tview.Flex {
 				} else {
 					items = loadedItems
 					selectedIndex = 0
-					updateList()
+					updateList(true)
 					showMessage("Data path changed to: " + newPath)
 				}
 			}
@@ -492,10 +537,12 @@ func createHelpModal() *tview.Flex {
 			"[black]c     Copy command to clipboard\n" +
 				"[black]a     Add new command\n" +
 				"[black]e     Edit command\n" +
-				"[black]d     Delete command\n" +
+				"[black]d     Delete command (with multi-select)\n" +
 				"[black]p     Change data path\n" +
 				"[black]/     Search/filter commands\n" +
 				"[black]?     Show this help\n" +
+				"[black]Space Toggle selection for multi-delete\n" +
+				"[black]u     Clear selection\n" +
 				"[black]q     Quit",
 		)
 
@@ -563,7 +610,7 @@ func createDeleteModal(filteredIndex int) *tview.Flex {
 					showMessage("Error saving: " + err.Error())
 				} else {
 					showMessage("Deleted: " + deletedCmd)
-					updateList()
+					updateList(true)
 					if selectedIndex >= len(filteredItems) {
 						selectedIndex = len(filteredItems) - 1
 					}
@@ -593,6 +640,91 @@ func createDeleteModal(filteredIndex int) *tview.Flex {
 	return overlay
 }
 
+// createDeleteModalMulti creates a delete confirmation modal for multiple items
+func createDeleteModalMulti(originalIndices []int) *tview.Flex {
+	if len(originalIndices) == 0 {
+		return nil
+	}
+
+	// Build list of commands to delete
+	var cmds []string
+	for _, idx := range originalIndices {
+		if idx >= 0 && idx < len(items) {
+			cmds = append(cmds, items[idx].Cmd)
+		}
+	}
+
+	titleText := fmt.Sprintf("Confirm Delete %d items", len(cmds))
+	textContent := ""
+	for i, cmd := range cmds {
+		if i >= 5 { // limit display to first 5 items
+			textContent += fmt.Sprintf("... and %d more\n", len(cmds)-5)
+			break
+		}
+		textContent += fmt.Sprintf("[%s]%s[-]\n", colorError.String(), cmd)
+	}
+
+	text := tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignCenter).
+		SetText(textContent)
+
+	text.SetBorder(true).
+		SetTitle(fmt.Sprintf(" %s ----- [%s] <Enter> Yes ", titleText, colorHelp.String())).
+		SetTitleColor(colorTitle)
+
+	text.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEsc {
+			mainPages.RemovePage("delete")
+			app.SetFocus(commandList)
+			return nil
+		}
+
+		if event.Key() == tcell.KeyEnter {
+			// Delete items from highest index to lowest to avoid shifting
+			sort.Slice(originalIndices, func(i, j int) bool {
+				return originalIndices[i] > originalIndices[j]
+			})
+			for _, idx := range originalIndices {
+				if idx >= 0 && idx < len(items) {
+					items = append(items[:idx], items[idx+1:]...)
+				}
+			}
+
+			if err := saveItems(items); err != nil {
+				showMessage("Error saving: " + err.Error())
+			} else {
+				showMessage(fmt.Sprintf("Deleted %d items", len(cmds)))
+				clearSelection()
+				updateList(true)
+				if selectedIndex >= len(filteredItems) {
+					selectedIndex = len(filteredItems) - 1
+				}
+			}
+
+			mainPages.RemovePage("delete")
+			app.SetFocus(commandList)
+			return nil
+		}
+
+		return event
+	})
+
+	// Centered overlay
+	overlay := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
+			AddItem(nil, 0, 1, false).
+			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(nil, 0, 1, false).
+				AddItem(text, 7, 0, true).
+				AddItem(nil, 0, 1, false), 60, 0, true).
+			AddItem(nil, 0, 1, false), 0, 1, false).
+		AddItem(nil, 0, 1, false)
+
+	return overlay
+}
+
 // createSearchInput creates the search input field as an overlay
 func createSearchInput() *tview.Flex {
 	input := tview.NewInputField().SetFieldBackgroundColor(tcell.ColorReset)
@@ -606,7 +738,7 @@ func createSearchInput() *tview.Flex {
 
 	input.SetChangedFunc(func(text string) {
 		filterText = text
-		updateList()
+		updateList(false)
 	})
 
 	input.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -658,6 +790,24 @@ func copyToClipboard() {
 	}
 }
 
+// toggleSelection toggles selection of the currently highlighted item
+func toggleSelection() {
+	if len(filteredItems) == 0 {
+		return
+	}
+	if selectedIndex < 0 || selectedIndex >= len(filteredItems) {
+		return
+	}
+
+	key := itemKey(filteredItems[selectedIndex])
+	if selectedItemKeys[key] {
+		delete(selectedItemKeys, key)
+	} else {
+		selectedItemKeys[key] = true
+	}
+	updateList(false)
+}
+
 // handleGlobalKeys handles global key events
 func handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
 	// Don't handle if we're in a modal or form
@@ -672,7 +822,7 @@ func handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
 		if filterText != "" {
 			filterText = ""
 			selectedIndex = 0
-			updateList()
+			updateList(false)
 			return nil
 		}
 	}
@@ -702,6 +852,14 @@ func handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
 	case '?':
 		showHelp()
 		return nil
+	case ' ':
+		toggleSelection()
+		return nil
+	case 'u', 'U':
+		clearSelection()
+		updateList(false)
+		showMessage("Selection cleared")
+		return nil
 	}
 
 	return event
@@ -723,7 +881,7 @@ func showAddForm() {
 				showMessage("Error saving: " + err.Error())
 			} else {
 				showMessage("Command added!")
-				updateList()
+				updateList(true)
 			}
 		},
 		OnCancel: func() {
@@ -769,7 +927,7 @@ func showEditForm() {
 					showMessage("Error saving: " + err.Error())
 				} else {
 					showMessage("Item updated!")
-					updateList()
+					updateList(true)
 				}
 			}
 		},
@@ -790,7 +948,22 @@ func showDeleteModal() {
 		return
 	}
 
-	deleteModal = createDeleteModal(selectedIndex)
+	// If there are selected items, delete them all
+	if len(selectedItemKeys) > 0 {
+		// Collect original indices of selected items
+		originalIndices := make([]int, 0, len(selectedItemKeys))
+		for i, item := range items {
+			if selectedItemKeys[itemKey(item)] {
+				originalIndices = append(originalIndices, i)
+			}
+		}
+		if len(originalIndices) == 0 {
+			return
+		}
+		deleteModal = createDeleteModalMulti(originalIndices)
+	} else {
+		deleteModal = createDeleteModal(selectedIndex)
+	}
 	mainPages.AddPage("delete", deleteModal, true, true)
 
 	textItem := deleteModal.GetItem(1).(*tview.Flex).GetItem(1).(*tview.Flex).GetItem(1).(*tview.TextView)
@@ -841,10 +1014,12 @@ func printHelp() {
 	fmt.Println("  c    Copy command to clipboard")
 	fmt.Println("  a    Add new command")
 	fmt.Println("  e    Edit command")
-	fmt.Println("  d    Delete command")
+	fmt.Println("  d    Delete command (with multi-select)")
 	fmt.Println("  p    Change data path")
 	fmt.Println("  /    Search commands")
 	fmt.Println("  ?    Show help")
+	fmt.Println("  Space Toggle selection for multi-delete")
+	fmt.Println("  u    Clear selection")
 	fmt.Println("  q    Quit")
 }
 
@@ -871,7 +1046,7 @@ func main() {
 
 	// Create main layout
 	mainFlex = createMainFlex()
-	updateList()
+	updateList(true)
 
 	// Create pages container
 	mainPages = tview.NewPages().
