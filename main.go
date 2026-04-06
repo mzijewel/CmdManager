@@ -192,13 +192,13 @@ func updateList(clearSel bool) {
 	}
 
 	filteredIdx := 0
-	for i, item := range items {
+	for _, item := range items {
 		if filterText == "" || strings.Contains(item.Cmd, filterText) || strings.Contains(item.Desc, filterText) {
 			var display string
 			if selectedItemKeys[itemKey(item)] {
 				display = fmt.Sprintf("[green][✓] [black]%s", item.Cmd)
 			} else {
-				display = fmt.Sprintf("[gray][%d] [black]%s", i+1, item.Cmd)
+				display = fmt.Sprintf("[gray][%d] [black]%s", filteredIdx+1, item.Cmd)
 			}
 			commandList.AddItem(display, "", 0, nil)
 			filteredItems = append(filteredItems, item)
