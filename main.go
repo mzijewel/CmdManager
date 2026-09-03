@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -11,59 +10,57 @@ import (
 	"time"
 
 	"github.com/atotto/clipboard"
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 const (
-	dataFileName    = "data.json"
-	messageTimeout  = 3 * time.Second
-	maxTextInputLen = 0
-	textInputWidth  = 80
-	paddingHeight   = 8
+	dataFileName   = "data.json"
+	configFileName = "config.json"
 )
 
-// Colors
-const (
-	colorDim    = "8"
-	colorCyan   = "6"
-	colorGreen  = "2"
-	colorYellow = "3"
-	colorRed    = "1"
-	colorWhite  = "7"
-	colorBlack  = "0"
-	colorPurple = "5"
+// Global colors
+var (
+	colorBorder   = tcell.ColorDarkCyan
+	colorTitle    = tcell.ColorDarkCyan
+	colorSelected = tcell.ColorDarkCyan
+	colorNormal   = tcell.ColorWhite
+	colorHelp     = tcell.ColorBlue
+	colorError    = tcell.ColorRed
+	colorSuccess  = tcell.ColorGreen
+	colorStatusBg = tcell.ColorPurple
+	colorStatusFg = tcell.ColorBlack
+	colorWhite    = tcell.ColorWhite
+	colorContent  = tcell.ColorBlack
 )
 
-// Modes
-const (
-	modeList          = "list"
-	modeAdd           = "add"
-	modeAddField      = "add_field"
-	modeEdit          = "edit"
-	modeEditField     = "edit_field"
-	modeConfirmDelete = "confirm_delete"
-	modeHelp          = "help"
+var (
+	jsonFilePath     string
+	configFilePath   string
+	app              *tview.Application
+	appScreen        tcell.Screen
+	mainFlex         *tview.Flex
+	commandList      *tview.List
+	detailsText      *tview.TextView
+	statusBar        *tview.TextView
+	items            []Item
+	filteredItems    []Item
+	selectedIndex    int
+	selectedItemKeys map[string]bool
+	rebuildingList   bool
+	filterText       string
+	currentMode      string
+	message          string
+	messageTimer     *time.Timer
+	tempDataPath     string
+	addForm          *tview.Flex
+	editForm         *tview.Flex
+	changePathFlex   *tview.Flex
+	helpModal        *tview.Flex
+	deleteModal      *tview.Flex
+	searchInput      *tview.Flex
+	mainPages        *tview.Pages
 )
-
-// Fields
-const (
-	fieldCmd  = 0
-	fieldDesc = 1
-)
-
-var jsonFilePath string
-
-func init() {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		homeDir = "."
-	}
-	jsonFilePath = filepath.Join(homeDir, ".cmdmanager", dataFileName)
-	// jsonFilePath = "./" + dataFileName
-}
 
 // Item represents a command item
 type Item struct {
@@ -71,52 +68,76 @@ type Item struct {
 	Desc string `json:"desc"`
 }
 
-func (i Item) Title() string       { return i.Cmd }
-func (i Item) Description() string { return i.Desc }
-func (i Item) FilterValue() string { return i.Cmd }
-
-// itemDelegate handles list item rendering
-type itemDelegate struct{}
-
-func (d itemDelegate) Height() int                               { return 1 }
-func (d itemDelegate) Spacing() int                              { return 0 }
-func (d itemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd { return nil }
-func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
-	i, ok := listItem.(Item)
-	if !ok {
-		return
-	}
-
-	idStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colorDim)).Bold(true)
-	cmdStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colorCyan)).Bold(true)
-
-	if index == m.Index() {
-		bgColor := lipgloss.Color(colorDim)
-		idStyle = idStyle.Background(bgColor)
-		cmdStyle = cmdStyle.Background(bgColor)
-	}
-
-	fmt.Fprintf(w, "  %s %s",
-		idStyle.Render(fmt.Sprintf("%d", index+1)),
-		cmdStyle.Render(i.Cmd),
-	)
+// itemKey returns a unique key for an item based on its command and description
+func itemKey(item Item) string {
+	return item.Cmd + "\x00" + item.Desc
 }
 
-// model holds the application state
-type model struct {
-	list                list.Model
-	items               []Item
-	textInput           textinput.Model
-	mode                string
-	editingIndex        int
-	editField           int
-	newItem             Item
-	editingItem         Item
-	message             string
-	messageTime         time.Time
-	filterText          string
-	customFilterEnabled bool
-	windowWidth         int
+// Config represents the application configuration
+type Config struct {
+	DataPath string `json:"dataPath"`
+}
+
+func init() {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = "."
+	}
+	configDir := filepath.Join(homeDir, ".cmdmanager")
+	configFilePath = filepath.Join(configDir, configFileName)
+
+	// Default data path
+	jsonFilePath = filepath.Join(".", ".data.json")
+
+	// Load config and override data path if set
+	config, err := loadConfig()
+	if err == nil && config.DataPath != "" {
+		jsonFilePath = config.DataPath
+	}
+
+	// Initialize selection map
+	selectedItemKeys = make(map[string]bool)
+}
+
+// clearSelection removes all selected items
+func clearSelection() {
+	selectedItemKeys = make(map[string]bool)
+}
+
+// loadConfig loads configuration from config file
+func loadConfig() (*Config, error) {
+	data, err := os.ReadFile(configFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &Config{DataPath: ""}, nil
+		}
+		return nil, err
+	}
+
+	var config Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, err
+	}
+
+	return &config, nil
+}
+
+// saveConfig saves configuration to config file
+func saveConfig(config *Config) error {
+	dir := filepath.Dir(configFilePath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	var buf strings.Builder
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "    ")
+	if err := encoder.Encode(config); err != nil {
+		return err
+	}
+
+	return os.WriteFile(configFilePath, []byte(buf.String()), 0o644)
 }
 
 // loadItems loads items from the JSON file
@@ -160,546 +181,828 @@ func saveItems(items []Item) error {
 	return os.WriteFile(jsonFilePath, []byte(buf.String()), 0o644)
 }
 
-// updateListItems updates the list model with current items
-func (m *model) updateListItems() {
-	if m.customFilterEnabled && m.filterText != "" {
-		// Apply exact contains filtering on cmd and desc
-		var filtered []list.Item
-		for _, item := range m.items {
-			if strings.Contains(item.Cmd, m.filterText) || strings.Contains(item.Desc, m.filterText) {
-				filtered = append(filtered, item)
+// updateList updates the command list with current items and filter
+func updateList(clearSel bool) {
+
+	rebuildingList = true
+	defer func() { rebuildingList = false }()
+	commandList.Clear()
+	filteredItems = []Item{}
+	if clearSel {
+		clearSelection() // Clear selection when list is rebuilt (e.g., filter changed)
+	}
+
+	filteredIdx := 0
+	for _, item := range items {
+		if filterText == "" || strings.Contains(item.Cmd, filterText) || strings.Contains(item.Desc, filterText) {
+			var display string
+			if selectedItemKeys[itemKey(item)] {
+				display = fmt.Sprintf("[green][✓] [black]%s", item.Cmd)
+			} else {
+				display = fmt.Sprintf("[gray][%d] [black]%s", filteredIdx+1, item.Cmd)
+			}
+			commandList.AddItem(display, "", 0, nil)
+			filteredItems = append(filteredItems, item)
+			filteredIdx++
+		}
+	}
+
+	// Update list title with item count and selected count
+	total := len(items)
+	filtered := len(filteredItems)
+	selected := len(selectedItemKeys)
+	title := fmt.Sprintf(" Commands [%d/%d] ", filtered, total)
+	if selected > 0 {
+		title = fmt.Sprintf(" Commands [%d/%d] (Selected: %d) ", filtered, total, selected)
+	}
+	commandList.SetTitle(title)
+	commandList.SetTitleColor(colorTitle)
+
+	// Reset selected index if out of bounds
+	if selectedIndex >= len(filteredItems) {
+
+		selectedIndex = len(filteredItems) - 1
+	}
+	if selectedIndex < 0 && len(filteredItems) > 0 {
+
+		selectedIndex = 0
+	}
+	// Restore cursor position
+	if len(filteredItems) > 0 && selectedIndex >= 0 {
+
+		commandList.SetCurrentItem(selectedIndex)
+	}
+
+	updateStatusBar()
+	updateDetails()
+}
+
+// updateStatusBar updates the status bar text
+func updateStatusBar() {
+	selectedCount := len(selectedItemKeys)
+	prefix := ""
+	if selectedCount > 0 {
+		prefix = fmt.Sprintf(" [%s]Selected: %d[-] |", colorSuccess.String(), selectedCount)
+	}
+	statusBar.SetText(fmt.Sprintf("%s [%s]<Space> Select   <u> Clear   <c> Copy   <a> Add   <e> Edit   <d> Delete   <p> Path   </> Search   <?> Help   <q> Quit ", prefix, colorHelp.String()))
+}
+
+// updateDetails updates the details panel with selected item
+func updateDetails() {
+	if len(filteredItems) == 0 {
+		detailsText.SetText("")
+		return
+	}
+
+	if selectedIndex >= 0 && selectedIndex < len(filteredItems) {
+		item := filteredItems[selectedIndex]
+		detailsText.SetText(fmt.Sprintf("[%s]%s", colorContent.String(), item.Desc))
+	} else {
+		detailsText.SetText("")
+	}
+}
+
+// showMessage displays a temporary message in the status bar
+func showMessage(msg string) {
+	message = msg
+	statusBar.SetText(fmt.Sprintf("[%s] %s [-]", colorSuccess.String(), msg))
+
+	if messageTimer != nil {
+		messageTimer.Stop()
+	}
+
+	messageTimer = time.AfterFunc(3*time.Second, func() {
+		app.QueueUpdateDraw(func() {
+			updateStatusBar()
+		})
+	})
+}
+
+// createMainFlex creates the main flex layout
+func createMainFlex() *tview.Flex {
+	commandList = tview.NewList().
+		ShowSecondaryText(false).
+		SetHighlightFullLine(true).
+		SetSelectedBackgroundColor(colorSelected)
+
+	commandList.SetBorder(true).
+		SetTitle(" Commands ").
+		SetTitleColor(colorTitle)
+
+	commandList.SetChangedFunc(func(index int, mainText string, secondaryText string, shortcut rune) {
+
+		if rebuildingList {
+			return
+		}
+		selectedIndex = index
+		updateDetails()
+	})
+
+	commandList.SetSelectedFunc(func(index int, mainText string, secondaryText string, shortcut rune) {
+		copyToClipboard()
+	})
+
+	detailsText = tview.NewTextView().
+		SetDynamicColors(true).
+		SetWordWrap(true)
+
+	detailsText.SetBorder(true).
+		SetTitle(" Details ").
+		SetTitleColor(colorTitle)
+
+	statusBar = tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignCenter)
+
+	// First row: 2 columns (list and details)
+	firstRow := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(commandList, 0, 1, true).
+		AddItem(detailsText, 0, 1, false)
+
+	// Second row: status bar (full width)
+	secondRow := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(statusBar, 1, 0, false)
+
+	mainFlex = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(firstRow, 0, 1, true).
+		AddItem(secondRow, 1, 0, false)
+
+	return mainFlex
+}
+
+// createFormOverlay creates a centered overlay for forms
+func createFormOverlay(content tview.Primitive, width, height int) *tview.Flex {
+	overlay := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
+			AddItem(nil, 0, 1, false).
+			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(nil, 0, 1, false).
+				AddItem(content, height, 0, true).
+				AddItem(nil, 0, 1, false), width, 0, true).
+			AddItem(nil, 0, 1, false), 0, 1, false).
+		AddItem(nil, 0, 1, false)
+
+	return overlay
+}
+
+// EntryFormMode represents the mode of the entry form
+type EntryFormMode int
+
+const (
+	ModeAdd EntryFormMode = iota
+	ModeEdit
+)
+
+// EntryFormConfig holds configuration for the entry form
+type EntryFormConfig struct {
+	Mode          EntryFormMode
+	Title         string
+	PageName      string
+	InitialCmd    string
+	InitialDesc   string
+	OriginalIndex int // For edit mode, the index in items slice
+	FilteredIndex int // For edit mode, the index in filteredItems slice
+	OnSave        func(cmd, desc string)
+	OnCancel      func()
+}
+
+// createEntryForm creates a reusable form for adding or editing commands
+func createEntryForm(config EntryFormConfig) *tview.Flex {
+	cmdInput := tview.NewInputField().
+		SetFieldBackgroundColor(tcell.ColorReset)
+
+	cmdInput.SetBorder(true).
+		SetTitle(fmt.Sprintf(" Command ----- [%s]<Enter> Next ", colorHelp.String())).
+		SetTitleColor(colorTitle).
+		SetTitleAlign(tview.AlignLeft)
+
+	cmdInput.SetText(config.InitialCmd).SetFieldTextColor(tcell.ColorBlack)
+
+	// Description text view for multiline input
+	descText := tview.NewTextArea()
+	descText.SetText(config.InitialDesc, true)
+	descText.SetTextStyle(tcell.StyleDefault.Foreground(tcell.ColorBlack))
+
+	descText.SetBorder(true).
+		SetTitle(fmt.Sprintf(" Description ----- [%s]<Ctrl+S> Save, <Esc> Cancel ", colorHelp.String())).
+		SetTitleColor(colorTitle).
+		SetTitleAlign(tview.AlignLeft)
+
+	// Container for input fields
+	formContent := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(cmdInput, 3, 0, false).
+		AddItem(descText, 0, 1, true)
+
+	formContent.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEsc {
+			mainPages.RemovePage(config.PageName)
+			if config.OnCancel != nil {
+				config.OnCancel()
+			}
+			app.SetFocus(commandList)
+			return nil
+		}
+
+		// Ctrl+S to save
+		if event.Key() == tcell.KeyCtrlS {
+			cmd := cmdInput.GetText()
+			desc := descText.GetText()
+
+			if cmd == "" {
+				return nil
+			}
+
+			if config.OnSave != nil {
+				config.OnSave(cmd, desc)
+			}
+
+			mainPages.RemovePage(config.PageName)
+			app.SetFocus(commandList)
+			return nil
+		}
+
+		// Enter on command field moves to description
+		if event.Key() == tcell.KeyEnter {
+			if cmdInput.HasFocus() {
+				cmd := cmdInput.GetText()
+				if cmd != "" {
+					app.SetFocus(descText)
+				}
+				return nil
 			}
 		}
-		m.list.SetItems(filtered)
-	} else {
-		// Show all items
-		listItems := make([]list.Item, len(m.items))
-		for i, item := range m.items {
-			listItems[i] = item
+
+		// Tab to switch between fields
+		if event.Key() == tcell.KeyTab {
+			if cmdInput.HasFocus() {
+				cmd := cmdInput.GetText()
+				if cmd != "" {
+					app.SetFocus(descText)
+				}
+			} else if descText.HasFocus() {
+				app.SetFocus(cmdInput)
+			}
+			return nil
 		}
-		m.list.SetItems(listItems)
-	}
+
+		// Shift+Tab to go back
+		if event.Key() == tcell.KeyBacktab {
+			if descText.HasFocus() {
+				app.SetFocus(cmdInput)
+			}
+			return nil
+		}
+
+		return event
+	})
+
+	return createFormOverlay(formContent, 60, 15)
 }
 
-// showMessage sets a temporary message to display
-func (m *model) showMessage(msg string) {
-	m.message = msg
-	m.messageTime = time.Now()
+// createChangePathOverlay creates the overlay for changing data path
+func createChangePathOverlay() *tview.Flex {
+	// Path input field with border and title
+	pathInput := tview.NewInputField().
+		SetFieldBackgroundColor(tcell.ColorReset).
+		SetText(jsonFilePath).SetFieldTextColor(tcell.ColorBlack)
+
+	pathInput.SetBorder(true).
+		SetTitle(fmt.Sprintf(" New Path ----- [%s]<Enter> save) ", colorHelp.String())).
+		SetTitleColor(colorTitle).
+		SetTitleAlign(tview.AlignLeft)
+
+	pathInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEsc {
+			mainPages.RemovePage("changepath")
+			app.SetFocus(commandList)
+			return nil
+		}
+
+		if event.Key() == tcell.KeyEnter {
+			newPath := pathInput.GetText()
+
+			if newPath == "" {
+				showMessage("Path change cancelled")
+				mainPages.RemovePage("changepath")
+				app.SetFocus(commandList)
+				return nil
+			}
+
+			config := &Config{DataPath: newPath}
+			if err := saveConfig(config); err != nil {
+				showMessage("Error saving config: " + err.Error())
+			} else {
+				jsonFilePath = newPath
+
+				// Reload items
+				loadedItems, err := loadItems()
+				if err != nil {
+					showMessage("Error loading from new path: " + err.Error())
+				} else {
+					items = loadedItems
+					selectedIndex = 0
+					updateList(true)
+					showMessage("Data path changed to: " + newPath)
+				}
+			}
+
+			mainPages.RemovePage("changepath")
+			app.SetFocus(commandList)
+			return nil
+		}
+
+		return event
+	})
+
+	overlay := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
+			AddItem(nil, 0, 1, false).
+			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(nil, 0, 1, false).
+				AddItem(pathInput, 3, 0, true).
+				AddItem(nil, 0, 1, false), 60, 0, true).
+			AddItem(nil, 0, 1, false), 0, 1, false).
+		AddItem(nil, 0, 1, false)
+
+	return overlay
 }
 
-// setupTextInput configures the text input component
-func setupTextInput() textinput.Model {
-	ti := textinput.New()
-	ti.Placeholder = "Type to search..."
-	ti.CharLimit = maxTextInputLen
-	ti.Width = textInputWidth
+// createHelpModal creates the help modal as a centered overlay
+func createHelpModal() *tview.Flex {
+	text := tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignLeft).
+		SetText(
+			"[black]c     Copy command to clipboard\n" +
+				"[black]a     Add new command\n" +
+				"[black]e     Edit command\n" +
+				"[black]d     Delete command (with multi-select)\n" +
+				"[black]p     Change data path\n" +
+				"[black]/     Search/filter commands\n" +
+				"[black]?     Show this help\n" +
+				"[black]Space Toggle selection for multi-delete\n" +
+				"[black]u     Clear selection\n" +
+				"[black]q     Quit",
+		)
 
-	return ti
+	text.SetBorder(true).
+		SetTitle(" Keybindings ").
+		SetTitleColor(colorTitle)
+
+	text.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Any key closes the help modal
+		mainPages.RemovePage("help")
+		app.SetFocus(commandList)
+		return nil
+	})
+
+	// Centered overlay
+	overlay := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
+			AddItem(nil, 0, 1, false).
+			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(nil, 0, 1, false).
+				AddItem(text, 15, 0, true).
+				AddItem(nil, 0, 1, false), 60, 0, true).
+			AddItem(nil, 0, 1, false), 0, 1, false).
+		AddItem(nil, 0, 1, false)
+
+	return overlay
 }
 
-// newListItem creates a new list model with default settings
-func newListItem(items []list.Item) list.Model {
-	l := list.New(items, itemDelegate{}, 0, 0)
-	l.Title = "Command Manager - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
-	l.SetShowStatusBar(false)
-	l.SetShowHelp(false)
-	return l
-}
-
-func initialModel() (model, error) {
-	m := model{mode: modeList}
-
-	items, err := loadItems()
-	if err != nil {
-		return m, err
-	}
-	m.items = items
-
-	listItems := make([]list.Item, len(items))
+// createDeleteModal creates the delete confirmation modal (no bg color, no buttons)
+// index is the index in filteredItems
+func createDeleteModal(filteredIndex int) *tview.Flex {
+	filteredItem := filteredItems[filteredIndex]
+	// Find the original index in items slice
+	originalIndex := -1
 	for i, item := range items {
-		listItems[i] = item
-	}
-
-	m.list = newListItem(listItems)
-	m.textInput = setupTextInput()
-
-	return m, nil
-}
-
-func (m model) Init() tea.Cmd {
-	return nil
-}
-
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		return m.handleKeyPress(msg)
-	case tea.WindowSizeMsg:
-		return m.handleWindowSize(msg)
-	}
-
-	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
-	return m, cmd
-}
-
-func (m *model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.mode == modeHelp {
-		m.mode = modeList
-		return m, nil
-	}
-
-	switch m.mode {
-	case modeAdd:
-		return m.handleAddInput(msg)
-	case modeAddField:
-		return m.handleAddFieldInput(msg)
-	case modeEdit:
-		return m.handleEditInput(msg)
-	case modeEditField:
-		return m.handleEditFieldInput(msg)
-	case modeConfirmDelete:
-		return m.handleDeleteConfirm(msg)
-	}
-
-	if m.textInput.Focused() {
-		return m.handleSearchInput(msg)
-	}
-
-	return m.handleListKeys(msg)
-}
-
-func (m *model) handleSearchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEsc:
-		m.textInput.Blur()
-		m.textInput.SetValue("")
-		m.filterText = ""
-		m.customFilterEnabled = false
-		m.updateListItems()
-		m.list.Title = "Command Manager - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
-	case tea.KeyEnter:
-		m.textInput.Blur()
-		m.list.Title = "Command Manager - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
-	case tea.KeyDown, tea.KeyUp:
-		m.textInput.Blur()
-		m.list.Title = "Command Manager - C: Copy, A: Add, E: Edit, D: Delete, /: Search, ?: Help"
-		m.list, _ = m.list.Update(msg)
-		return m, nil
-	default:
-		var cmd tea.Cmd
-		m.textInput, cmd = m.textInput.Update(msg)
-		m.filterText = m.textInput.Value()
-		m.customFilterEnabled = true
-		m.updateListItems()
-		m.list.Title = "Search: " + m.textInput.View()
-		return m, cmd
-	}
-	return m, nil
-}
-
-func (m *model) handleAddInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyCtrlC, tea.KeyEsc:
-		m.mode = modeList
-		m.textInput.Blur()
-		return m, nil
-	case tea.KeyEnter:
-		m.newItem.Cmd = m.textInput.Value()
-		m.mode = modeAddField
-		m.editField = fieldDesc
-		m.textInput.Placeholder = "Enter description..."
-		m.textInput.SetValue("")
-		m.textInput.Focus()
-		return m, textinput.Blink
-	default:
-		var cmd tea.Cmd
-		m.textInput, cmd = m.textInput.Update(msg)
-		return m, cmd
-	}
-}
-
-func (m *model) handleEditInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyCtrlC, tea.KeyEsc:
-		m.mode = modeList
-		m.textInput.Blur()
-		return m, nil
-	case tea.KeyEnter:
-		m.editingItem.Cmd = m.textInput.Value()
-		m.mode = modeEditField
-		m.editField = fieldDesc
-		m.textInput.Placeholder = "Enter description..."
-		m.textInput.SetValue(m.editingItem.Desc)
-		m.textInput.CursorEnd()
-		m.textInput.Focus()
-		return m, textinput.Blink
-	default:
-		var cmd tea.Cmd
-		m.textInput, cmd = m.textInput.Update(msg)
-		return m, cmd
-	}
-}
-
-func (m *model) handleAddFieldInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyCtrlC, tea.KeyEsc:
-		m.mode = modeList
-		m.textInput.Blur()
-		return m, nil
-	case tea.KeyEnter:
-		return m.completeAddField()
-	default:
-		var cmd tea.Cmd
-		m.textInput, cmd = m.textInput.Update(msg)
-		return m, cmd
-	}
-}
-
-func (m *model) completeAddField() (tea.Model, tea.Cmd) {
-	switch m.editField {
-	case fieldDesc:
-		m.newItem.Desc = m.textInput.Value()
-		m.items = append(m.items, m.newItem)
-
-		if err := saveItems(m.items); err != nil {
-			m.showMessage("Error saving: " + err.Error())
-		}
-		m.updateListItems()
-		m.mode = modeList
-		m.textInput.Blur()
-		m.textInput.SetValue("")
-		m.showMessage("Command added!")
-		return m, nil
-	}
-	return m, nil
-}
-
-func (m *model) handleEditFieldInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyCtrlC, tea.KeyEsc:
-		m.mode = modeList
-		m.textInput.Blur()
-		return m, nil
-	case tea.KeyEnter:
-		return m.completeEditField()
-	default:
-		var cmd tea.Cmd
-		m.textInput, cmd = m.textInput.Update(msg)
-		return m, cmd
-	}
-}
-
-func (m *model) completeEditField() (tea.Model, tea.Cmd) {
-	switch m.editField {
-	case fieldDesc:
-		m.editingItem.Desc = m.textInput.Value()
-		m.items[m.editingIndex] = m.editingItem
-
-		if err := saveItems(m.items); err != nil {
-			m.showMessage("Error saving: " + err.Error())
-		}
-		m.updateListItems()
-		m.mode = modeList
-		m.textInput.Blur()
-		m.textInput.SetValue("")
-		m.showMessage("Item updated!")
-		return m, nil
-	}
-	return m, nil
-}
-
-func (m *model) handleDeleteConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyRunes:
-		if msg.String() == "y" || msg.String() == "Y" {
-			return m.deleteItem()
-		}
-		if msg.String() == "n" || msg.String() == "N" {
-			m.mode = modeList
-			return m, nil
-		}
-	case tea.KeyCtrlC, tea.KeyEsc:
-		m.mode = modeList
-		return m, nil
-	}
-	return m, nil
-}
-
-func (m *model) deleteItem() (tea.Model, tea.Cmd) {
-	deletedCmd := m.items[m.editingIndex].Cmd
-	m.items = append(m.items[:m.editingIndex], m.items[m.editingIndex+1:]...)
-
-	if err := saveItems(m.items); err != nil {
-		m.showMessage("Error saving: " + err.Error())
-	}
-	m.updateListItems()
-	m.mode = modeList
-	m.showMessage("Deleted: " + deletedCmd)
-	return m, nil
-}
-
-func (m *model) handleListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == "?" {
-		m.mode = modeHelp
-		return m, nil
-	}
-
-	if msg.String() == "q" || msg.String() == "Q" {
-		return m, tea.Quit
-	}
-
-	if msg.Type == tea.KeyEsc {
-		if m.customFilterEnabled {
-			m.customFilterEnabled = false
-			m.filterText = ""
-			m.textInput.SetValue("")
-			m.updateListItems()
-			return m, nil
+		if item.Cmd == filteredItem.Cmd && item.Desc == filteredItem.Desc {
+			originalIndex = i
+			break
 		}
 	}
 
-	switch msg.Type {
-	case tea.KeyRunes:
-		return m.handleListRunes(msg)
-	case tea.KeyEnter:
-		return m.copyToClipboard()
-	}
+	text := tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignCenter).
+		SetText(fmt.Sprintf(" [%s]%s[-]\"?", colorError.String(), filteredItem.Cmd))
 
-	// Pass through navigation keys (up, down, etc.) to the list
-	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
-	return m, cmd
+	text.SetBorder(true).
+		SetTitle(fmt.Sprintf(" Confirm Delete ----- [%s] <Enter> Yes ", colorHelp.String())).
+		SetTitleColor(colorTitle)
+
+	text.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEsc {
+			mainPages.RemovePage("delete")
+			app.SetFocus(commandList)
+			return nil
+		}
+
+		if event.Key() == tcell.KeyEnter {
+			if originalIndex >= 0 {
+				deletedCmd := items[originalIndex].Cmd
+				items = append(items[:originalIndex], items[originalIndex+1:]...)
+
+				if err := saveItems(items); err != nil {
+					showMessage("Error saving: " + err.Error())
+				} else {
+					showMessage("Deleted: " + deletedCmd)
+					updateList(true)
+					if selectedIndex >= len(filteredItems) {
+						selectedIndex = len(filteredItems) - 1
+					}
+				}
+			}
+
+			mainPages.RemovePage("delete")
+			app.SetFocus(commandList)
+			return nil
+		}
+
+		return event
+	})
+
+	// Centered overlay
+	overlay := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
+			AddItem(nil, 0, 1, false).
+			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(nil, 0, 1, false).
+				AddItem(text, 5, 0, true).
+				AddItem(nil, 0, 1, false), 50, 0, true).
+			AddItem(nil, 0, 1, false), 0, 1, false).
+		AddItem(nil, 0, 1, false)
+
+	return overlay
 }
 
-func (m *model) handleListRunes(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "c", "C":
-		return m.copyToClipboard()
-	case "/":
-		m.textInput.Focus()
-		m.textInput.SetValue("")
-		m.filterText = ""
-		m.customFilterEnabled = false
-		m.updateListItems()
-		m.list.Title = "Search: " + m.textInput.View()
-		return m, textinput.Blink
-	case "a", "A":
-		return m.startAdd()
-	case "e", "E":
-		return m.startEdit()
-	case "d", "D":
-		return m.startDelete()
+// createDeleteModalMulti creates a delete confirmation modal for multiple items
+func createDeleteModalMulti(originalIndices []int) *tview.Flex {
+	if len(originalIndices) == 0 {
+		return nil
 	}
-	return m, nil
+
+	// Build list of commands to delete
+	var cmds []string
+	for _, idx := range originalIndices {
+		if idx >= 0 && idx < len(items) {
+			cmds = append(cmds, items[idx].Cmd)
+		}
+	}
+
+	titleText := fmt.Sprintf("Confirm Delete %d items", len(cmds))
+	textContent := ""
+	for i, cmd := range cmds {
+		if i >= 5 { // limit display to first 5 items
+			textContent += fmt.Sprintf("... and %d more\n", len(cmds)-5)
+			break
+		}
+		textContent += fmt.Sprintf("[%s]%s[-]\n", colorError.String(), cmd)
+	}
+
+	text := tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignCenter).
+		SetText(textContent)
+
+	text.SetBorder(true).
+		SetTitle(fmt.Sprintf(" %s ----- [%s] <Enter> Yes ", titleText, colorHelp.String())).
+		SetTitleColor(colorTitle)
+
+	text.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEsc {
+			mainPages.RemovePage("delete")
+			app.SetFocus(commandList)
+			return nil
+		}
+
+		if event.Key() == tcell.KeyEnter {
+			// Delete items from highest index to lowest to avoid shifting
+			sort.Slice(originalIndices, func(i, j int) bool {
+				return originalIndices[i] > originalIndices[j]
+			})
+			for _, idx := range originalIndices {
+				if idx >= 0 && idx < len(items) {
+					items = append(items[:idx], items[idx+1:]...)
+				}
+			}
+
+			if err := saveItems(items); err != nil {
+				showMessage("Error saving: " + err.Error())
+			} else {
+				showMessage(fmt.Sprintf("Deleted %d items", len(cmds)))
+				clearSelection()
+				updateList(true)
+				if selectedIndex >= len(filteredItems) {
+					selectedIndex = len(filteredItems) - 1
+				}
+			}
+
+			mainPages.RemovePage("delete")
+			app.SetFocus(commandList)
+			return nil
+		}
+
+		return event
+	})
+
+	// Centered overlay
+	overlay := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
+			AddItem(nil, 0, 1, false).
+			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(nil, 0, 1, false).
+				AddItem(text, 7, 0, true).
+				AddItem(nil, 0, 1, false), 60, 0, true).
+			AddItem(nil, 0, 1, false), 0, 1, false).
+		AddItem(nil, 0, 1, false)
+
+	return overlay
 }
 
-func (m *model) copyToClipboard() (tea.Model, tea.Cmd) {
-	if len(m.items) == 0 {
-		return m, nil
+// createSearchInput creates the search input field as an overlay
+func createSearchInput() *tview.Flex {
+	input := tview.NewInputField().SetFieldBackgroundColor(tcell.ColorReset)
+
+	input.SetBorder(true).
+		SetTitle(" Search ").
+		SetTitleColor(colorTitle).
+		SetTitleAlign(tview.AlignLeft)
+
+	input.SetFieldTextColor(tcell.ColorBlack)
+
+	input.SetChangedFunc(func(text string) {
+		filterText = text
+		updateList(false)
+	})
+
+	input.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEnter || event.Key() == tcell.KeyEsc {
+			mainPages.RemovePage("search")
+			app.SetFocus(commandList)
+			return nil
+		}
+
+		// Up/Down arrow to close search and focus list
+		if event.Key() == tcell.KeyUp || event.Key() == tcell.KeyDown {
+			mainPages.RemovePage("search")
+			app.SetFocus(commandList)
+			// Pass the key event to the list for navigation
+			app.QueueEvent(event)
+			return nil
+		}
+
+		return event
+	})
+
+	overlay := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexColumn).
+			AddItem(nil, 0, 1, false).
+			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(nil, 0, 1, false).
+				AddItem(input, 3, 0, true).
+				AddItem(nil, 0, 1, false), 60, 0, true).
+			AddItem(nil, 0, 1, false), 0, 1, false).
+		AddItem(nil, 0, 1, false)
+
+	return overlay
+}
+
+// copyToClipboard copies the selected command to clipboard
+func copyToClipboard() {
+	if len(filteredItems) == 0 {
+		return
 	}
 
-	selectedItem, ok := m.list.SelectedItem().(Item)
-	if !ok {
-		return m, nil
+	if selectedIndex >= 0 && selectedIndex < len(filteredItems) {
+		cmd := filteredItems[selectedIndex].Cmd
+		if err := clipboard.WriteAll(cmd); err == nil {
+			showMessage("Copied: " + cmd)
+		} else if appScreen != nil {
+			// No xclip/xsel/wl-copy available: ask the terminal itself to
+			// take the text via OSC 52. The terminal never reports back, so
+			// we cannot confirm it landed.
+			appScreen.SetClipboard([]byte(cmd))
+			showMessage("Copied via terminal: " + cmd)
+		} else {
+			showMessage("Failed to copy: " + err.Error())
+		}
+	}
+}
+
+// toggleSelection toggles selection of the currently highlighted item
+func toggleSelection() {
+	if len(filteredItems) == 0 {
+		return
+	}
+	if selectedIndex < 0 || selectedIndex >= len(filteredItems) {
+		return
 	}
 
-	if err := clipboard.WriteAll(selectedItem.Cmd); err == nil {
-		return m, tea.Quit
+	key := itemKey(filteredItems[selectedIndex])
+	if selectedItemKeys[key] {
+		delete(selectedItemKeys, key)
 	} else {
-		m.showMessage("Failed to copy: " + err.Error())
+		selectedItemKeys[key] = true
 	}
-	return m, nil
+	updateList(false)
 }
 
-func (m *model) startAdd() (tea.Model, tea.Cmd) {
-	m.mode = modeAdd
-	m.newItem = Item{
-		Desc: "New command",
-	}
-	m.textInput.Placeholder = "Enter command..."
-	m.textInput.SetValue("")
-	m.textInput.Focus()
-	return m, textinput.Blink
-}
-
-func (m *model) startEdit() (tea.Model, tea.Cmd) {
-	selectedItem, ok := m.list.SelectedItem().(Item)
-	if !ok {
-		return m, nil
+// handleGlobalKeys handles global key events
+func handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
+	// Don't handle if we're in a modal or form
+	if mainPages.HasPage("add") || mainPages.HasPage("edit") ||
+		mainPages.HasPage("changepath") || mainPages.HasPage("delete") ||
+		mainPages.HasPage("help") || mainPages.HasPage("search") {
+		return event
 	}
 
-	m.mode = modeEdit
-	m.editingIndex = m.findItemIndex(selectedItem)
-	m.editField = fieldCmd
-	m.editingItem = m.items[m.editingIndex]
-	m.textInput.Placeholder = "Enter command..."
-	m.textInput.SetValue(m.items[m.editingIndex].Cmd)
-	m.textInput.CursorEnd()
-	m.textInput.Focus()
-	return m, textinput.Blink
-}
-
-func (m *model) startDelete() (tea.Model, tea.Cmd) {
-	selectedItem, ok := m.list.SelectedItem().(Item)
-	if !ok {
-		return m, nil
-	}
-
-	m.editingIndex = m.findItemIndex(selectedItem)
-	m.mode = modeConfirmDelete
-	return m, nil
-}
-
-func (m *model) findItemIndex(item Item) int {
-	for i, it := range m.items {
-		if it.Cmd == item.Cmd && it.Desc == item.Desc {
-			return i
+	// Esc to reset filter
+	if event.Key() == tcell.KeyEsc {
+		if filterText != "" {
+			filterText = ""
+			selectedIndex = 0
+			updateList(false)
+			return nil
 		}
 	}
-	return 0
-}
 
-func (m *model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
-	m.windowWidth = msg.Width
-	listHeight := msg.Height - paddingHeight
-	if listHeight < 7 {
-		listHeight = 7
-	}
-	m.list.SetSize(msg.Width, listHeight)
-	m.textInput.Width = msg.Width - 20
-	return m, nil
-}
-
-func (m model) View() string {
-	switch m.mode {
-	case modeAdd:
-		return m.viewAdd()
-	case modeAddField:
-		return m.viewAddField()
-	case modeEdit:
-		return m.viewEdit()
-	case modeEditField:
-		return m.viewEditField()
-	case modeConfirmDelete:
-		return m.viewConfirmDelete()
-	case modeHelp:
-		return m.viewHelp()
-	}
-
-	return m.viewList()
-}
-
-func (m *model) viewAdd() string {
-	s := "\n  Add New Command\n\n"
-	s += "  Command: " + m.textInput.View() + "\n\n"
-	s += "  (Enter to continue, Ctrl+C/Esc to cancel)"
-	return s
-}
-
-func (m *model) viewEdit() string {
-	s := "\n  Edit Command\n\n"
-	s += "  Command: " + m.textInput.View() + "\n\n"
-	s += "  (Enter to continue, Ctrl+C/Esc to cancel)"
-	return s
-}
-
-func (m *model) viewAddField() string {
-	s := "\n  Add New Command\n\n"
-	s += "  Command: " + m.newItem.Cmd + "\n"
-	s += "  Description: " + m.textInput.View() + "\n\n"
-	s += "  (Enter to save, Ctrl+C/Esc to cancel)"
-	return s
-}
-
-func (m *model) viewEditField() string {
-	s := "\n  Edit Description\n\n"
-	s += "  Command: " + m.editingItem.Cmd + "\n"
-	s += "  Description: " + m.textInput.View() + "\n\n"
-	s += "  (Enter to save, Ctrl+C/Esc to cancel)"
-	return s
-}
-
-func (m *model) viewConfirmDelete() string {
-	selectedItem := m.items[m.editingIndex]
-	s := fmt.Sprintf("\n  Delete \"%s\"?\n\n", selectedItem.Cmd)
-	s += "  " + lipgloss.NewStyle().Foreground(lipgloss.Color(colorRed)).Bold(true).Render("Press Y to confirm, N to cancel")
-	return s
-}
-
-func (m *model) viewHelp() string {
-	s := "\n  Help - Command Manager\n\n"
-	s += "  JSON file: " + jsonFilePath + "\n\n"
-	s += "  Keybindings:\n"
-	s += "    c    Copy command to clipboard\n"
-	s += "    a    Add new command\n"
-	s += "    e    Edit command\n"
-	s += "    d    Delete command\n"
-	s += "    /    Search commands\n"
-	s += "    ?    Show this help\n"
-	s += "    q    Quit\n\n"
-	s += "  (Press any key to close)"
-	return s
-}
-
-func (m *model) viewList() string {
-	var s string
-	s += m.list.View()
-	s += m.renderStatusBar()
-	s += "\n"
-	s += m.renderItemDetails()
-
-	return s
-}
-
-func (m *model) renderStatusBar() string {
-	totalItems := len(m.items)
-	filteredItems := len(m.list.VisibleItems())
-
-	statusText := fmt.Sprintf(" Total: %d items", totalItems)
-	if filteredItems != totalItems {
-		statusText = fmt.Sprintf(" Showing: %d of %d items", filteredItems, totalItems)
+	switch event.Rune() {
+	case 'q', 'Q':
+		app.Stop()
+		return nil
+	case 'c', 'C':
+		copyToClipboard()
+		return nil
+	case 'a', 'A':
+		showAddForm()
+		return nil
+	case 'e', 'E':
+		showEditForm()
+		return nil
+	case 'd', 'D':
+		showDeleteModal()
+		return nil
+	case 'p', 'P':
+		showChangePathForm()
+		return nil
+	case '/':
+		showSearch()
+		return nil
+	case '?':
+		showHelp()
+		return nil
+	case ' ':
+		toggleSelection()
+		return nil
+	case 'u', 'U':
+		clearSelection()
+		updateList(false)
+		showMessage("Selection cleared")
+		return nil
 	}
 
-	return "\n" + lipgloss.NewStyle().
-		Background(lipgloss.Color(colorPurple)).
-		Foreground(lipgloss.Color(colorBlack)).
-		Bold(true).
-		Render(statusText)
+	return event
 }
 
-func (m *model) renderItemDetails() string {
-	if len(m.items) == 0 {
-		return m.renderEmptyOrMessage()
-	}
+// showAddForm shows the add form modal
+func showAddForm() {
+	addForm = createEntryForm(EntryFormConfig{
+		Mode:        ModeAdd,
+		Title:       "Add New Command",
+		PageName:    "add",
+		InitialCmd:  "",
+		InitialDesc: "",
+		OnSave: func(cmd, desc string) {
+			newItem := Item{Cmd: cmd, Desc: desc}
+			items = append(items, newItem)
 
-	selectedItem, ok := m.list.SelectedItem().(Item)
-	if !ok {
-		return "\n  \n  "
-	}
+			if err := saveItems(items); err != nil {
+				showMessage("Error saving: " + err.Error())
+			} else {
+				showMessage("Command added!")
+				updateList(true)
+			}
+		},
+		OnCancel: func() {
+			// No action needed on cancel for add
+		},
+	})
 
-	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colorWhite))
-	messageStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen))
-
-	desc := descStyle.Render(selectedItem.Desc)
-
-	if m.hasActiveMessage() {
-		msg := messageStyle.Render(m.message)
-		return "\n  " + desc + "  │  " + msg + "\n  "
-	}
-
-	return "\n  " + desc + "\n  "
+	mainPages.AddPage("add", addForm, true, true)
+	formContent := addForm.GetItem(1).(*tview.Flex).GetItem(1).(*tview.Flex).GetItem(1).(*tview.Flex)
+	cmdInput := formContent.GetItem(0).(*tview.InputField)
+	app.SetFocus(cmdInput)
 }
 
-func (m *model) renderEmptyOrMessage() string {
-	if m.hasActiveMessage() {
-		return "\n  " + lipgloss.NewStyle().Foreground(lipgloss.Color(colorGreen)).Render(m.message) + "\n  "
+// showEditForm shows the edit form modal
+func showEditForm() {
+	if len(filteredItems) == 0 {
+		return
 	}
-	return "\n  \n  "
+
+	filteredItem := filteredItems[selectedIndex]
+	// Find the original index in items slice
+	originalIndex := -1
+	for i, item := range items {
+		if item.Cmd == filteredItem.Cmd && item.Desc == filteredItem.Desc {
+			originalIndex = i
+			break
+		}
+	}
+
+	editForm = createEntryForm(EntryFormConfig{
+		Mode:          ModeEdit,
+		Title:         "Edit Command",
+		PageName:      "edit",
+		InitialCmd:    filteredItem.Cmd,
+		InitialDesc:   filteredItem.Desc,
+		OriginalIndex: originalIndex,
+		FilteredIndex: selectedIndex,
+		OnSave: func(cmd, desc string) {
+			if originalIndex >= 0 {
+				items[originalIndex] = Item{Cmd: cmd, Desc: desc}
+
+				if err := saveItems(items); err != nil {
+					showMessage("Error saving: " + err.Error())
+				} else {
+					showMessage("Item updated!")
+					updateList(true)
+				}
+			}
+		},
+		OnCancel: func() {
+			// No action needed on cancel for edit
+		},
+	})
+
+	mainPages.AddPage("edit", editForm, true, true)
+	formContent := editForm.GetItem(1).(*tview.Flex).GetItem(1).(*tview.Flex).GetItem(1).(*tview.Flex)
+	cmdInput := formContent.GetItem(0).(*tview.InputField)
+	app.SetFocus(cmdInput)
 }
 
-func (m *model) hasActiveMessage() bool {
-	return m.message != "" && time.Since(m.messageTime) < messageTimeout
+// showDeleteModal shows the delete confirmation modal
+func showDeleteModal() {
+	if len(filteredItems) == 0 {
+		return
+	}
+
+	// If there are selected items, delete them all
+	if len(selectedItemKeys) > 0 {
+		// Collect original indices of selected items
+		originalIndices := make([]int, 0, len(selectedItemKeys))
+		for i, item := range items {
+			if selectedItemKeys[itemKey(item)] {
+				originalIndices = append(originalIndices, i)
+			}
+		}
+		if len(originalIndices) == 0 {
+			return
+		}
+		deleteModal = createDeleteModalMulti(originalIndices)
+	} else {
+		deleteModal = createDeleteModal(selectedIndex)
+	}
+	mainPages.AddPage("delete", deleteModal, true, true)
+
+	textItem := deleteModal.GetItem(1).(*tview.Flex).GetItem(1).(*tview.Flex).GetItem(1).(*tview.TextView)
+	app.SetFocus(textItem)
+}
+
+// showChangePathForm shows the change path form
+func showChangePathForm() {
+	changePathFlex = createChangePathOverlay()
+	mainPages.AddPage("changepath", changePathFlex, true, true)
+
+	pathInput := changePathFlex.GetItem(1).(*tview.Flex).GetItem(1).(*tview.Flex).GetItem(1).(*tview.InputField)
+	app.SetFocus(pathInput)
+}
+
+// showHelp shows the help modal
+func showHelp() {
+	helpModal = createHelpModal()
+	mainPages.AddPage("help", helpModal, true, true)
+
+	textItem := helpModal.GetItem(1).(*tview.Flex).GetItem(1).(*tview.Flex).GetItem(1).(*tview.TextView)
+	app.SetFocus(textItem)
+}
+
+// showSearch shows the search input
+func showSearch() {
+	searchInput = createSearchInput()
+	input := searchInput.GetItem(1).(*tview.Flex).GetItem(1).(*tview.Flex).GetItem(1).(*tview.InputField)
+	input.SetText(filterText)
+
+	mainPages.AddPage("search", searchInput, true, true)
+	app.SetFocus(input)
 }
 
 func printHelp() {
@@ -711,15 +1014,19 @@ func printHelp() {
 	fmt.Println("Options:")
 	fmt.Println("  -h, --help    Show this help message")
 	fmt.Println()
-	fmt.Println("JSON file path:")
+	fmt.Println("Data file path:")
 	fmt.Printf("  %s\n", jsonFilePath)
 	fmt.Println()
 	fmt.Println("Keybindings:")
 	fmt.Println("  c    Copy command to clipboard")
 	fmt.Println("  a    Add new command")
 	fmt.Println("  e    Edit command")
-	fmt.Println("  d    Delete command")
+	fmt.Println("  d    Delete command (with multi-select)")
+	fmt.Println("  p    Change data path")
 	fmt.Println("  /    Search commands")
+	fmt.Println("  ?    Show help")
+	fmt.Println("  Space Toggle selection for multi-delete")
+	fmt.Println("  u    Clear selection")
 	fmt.Println("  q    Quit")
 }
 
@@ -731,15 +1038,39 @@ func main() {
 		}
 	}
 
-	m, err := initialModel()
+	// Load items
+	var err error
+	items, err = loadItems()
 	if err != nil {
-		fmt.Printf("Error initializing: %v\n", err)
+		fmt.Printf("Error loading items: %v\n", err)
 		os.Exit(1)
 	}
 
-	p := tea.NewProgram(m, tea.WithAltScreen())
-	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error running program: %v\n", err)
+	// Create application
+	app = tview.NewApplication()
+	tview.Styles.BorderColor = colorBorder
+	tview.Styles.PrimitiveBackgroundColor = tcell.ColorReset
+
+	// Create main layout
+	mainFlex = createMainFlex()
+	updateList(true)
+
+	// Create pages container
+	mainPages = tview.NewPages().
+		AddPage("main", mainFlex, true, true)
+
+	// Set up global key handler
+	app.SetInputCapture(handleGlobalKeys)
+
+	// Keep a handle on the screen so copyToClipboard can fall back to OSC 52
+	if screen, err := tcell.NewScreen(); err == nil {
+		appScreen = screen
+		app.SetScreen(screen)
+	}
+
+	// Set root and run
+	if err := app.SetRoot(mainPages, true).EnableMouse(true).Run(); err != nil {
+		fmt.Printf("Error running application: %v\n", err)
 		os.Exit(1)
 	}
 }
