@@ -38,6 +38,7 @@ var (
 	jsonFilePath     string
 	configFilePath   string
 	app              *tview.Application
+	appScreen        tcell.Screen
 	mainFlex         *tview.Flex
 	commandList      *tview.List
 	detailsText      *tview.TextView
@@ -784,6 +785,12 @@ func copyToClipboard() {
 		cmd := filteredItems[selectedIndex].Cmd
 		if err := clipboard.WriteAll(cmd); err == nil {
 			showMessage("Copied: " + cmd)
+		} else if appScreen != nil {
+			// No xclip/xsel/wl-copy available: ask the terminal itself to
+			// take the text via OSC 52. The terminal never reports back, so
+			// we cannot confirm it landed.
+			appScreen.SetClipboard([]byte(cmd))
+			showMessage("Copied via terminal: " + cmd)
 		} else {
 			showMessage("Failed to copy: " + err.Error())
 		}
@@ -1054,6 +1061,12 @@ func main() {
 
 	// Set up global key handler
 	app.SetInputCapture(handleGlobalKeys)
+
+	// Keep a handle on the screen so copyToClipboard can fall back to OSC 52
+	if screen, err := tcell.NewScreen(); err == nil {
+		appScreen = screen
+		app.SetScreen(screen)
+	}
 
 	// Set root and run
 	if err := app.SetRoot(mainPages, true).EnableMouse(true).Run(); err != nil {
